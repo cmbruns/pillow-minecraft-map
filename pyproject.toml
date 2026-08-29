@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pillow-minecraft-map"
+version = "1.0.0"
+description = "A Pillow Image plugin to open Minecraft .dat map files."
+readme = "README.md"
+authors = [
+    { name = "Christopher Bruns", email = "cmbruns@rotatingpenguin.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "Pillow>=10.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/cmbruns/pillow-minecraft-map"
