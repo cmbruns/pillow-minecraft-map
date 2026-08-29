@@ -1,2 +1,3 @@
 /.idea
 /.venv
+/src/pillow_minecraft_map/__pycache__
