@@ -7,11 +7,6 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
     format = "MINECRAFT_MAP"
     format_description = "Minecraft Map Item Format (.dat)"
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._pixels = None
-        self.file_bytes = b''
-
     @staticmethod
     def accept(prefix: bytes) -> bool:
         """
