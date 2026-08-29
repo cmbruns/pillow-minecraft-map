@@ -12,9 +12,11 @@ Limitations:
 
 
 import gzip
+import logging
 from typing import cast, BinaryIO
-
 from PIL import Image, ImageFile, ImagePalette
+
+logger = logging.getLogger("PIL.MinecraftMapPlugin")
 
 # --- HISTORICAL MAP PALETTES ---
 # --- STEP 1: Baseline 1.7 Legacy Map Palette (14 base IDs / 56 colors) ---
@@ -253,8 +255,12 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
             raw_palette = MINECRAFT_1_8_MAP_PALETTE
         else:  # Pre-1.8 Legacy Beta
             raw_palette = MINECRAFT_1_7_MAP_PALETTE
+        # Force a safety slice window down to exactly 64 base IDs (256 colors) max
+        # to ensure it strictly respects Pillow's 8-bit C limits.
+        # This keeps up to ID 63 (Terracotta Light Gray) and drops only the last 2 IDs.
+        safe_palette_base = raw_palette[:64]
         # Flatten the list of RGB tuples into a 1D sequence of integers
-        flat_palette = [color for rgb in raw_palette for color in rgb]
+        flat_palette = [color for rgb in safe_palette_base for color in rgb]
         # Pad out to exactly 768 entries (256 colors * 3 channels) using zeros
         pil_palette = flat_palette + [0] * (768 - len(flat_palette))
         self.palette = ImagePalette.ImagePalette(mode="RGB", palette=pil_palette)
@@ -275,7 +281,191 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         self.fp = None
 
 
-def register_plugin():
+def _encode_nbt_string(name: str) -> bytes:
+    encoded = name.encode("utf-8")
+    return len(encoded).to_bytes(2, "big") + encoded
+
+
+def _save(im: Image.Image, fp, filename):
+    """
+    Saves a Pillow image structure back into a standard Minecraft Java .dat map item.
+    Automatically handles resizing, alpha transparency layers, and color quantization.
+    Supports optional version mapping parameters: im.save(fp, version="1.18")
+    """
+
+    # READ OPTIONAL USER PARAMETER (Default to latest safe 1.20 profile)
+    user_version = im.encoderinfo.get("version", "1.20")
+    try:
+        # Try to handle a wider range of version identifiers
+        minor = int(str(user_version).split(".")[1])
+        if minor <= 0:
+            pass  # No idea
+        elif minor < 8:
+            user_version = "1.7"
+        elif minor < 12:
+            user_version = "1.8"
+        if minor >= 20:
+            user_version = "1.20"
+    except IndexError:
+        pass
+
+    # Map friendly versions and direct integer tags to baseline palettes
+    VERSION_ROUTER = {
+        # 1.20+ Timeline (Truncated safely to 64 Base IDs / 256 colors max)
+        "1.20": (3463, MINECRAFT_1_20_MAP_PALETTE[:64]),
+        "1.20.1": (3463, MINECRAFT_1_20_MAP_PALETTE[:64]),
+        3463: (3463, MINECRAFT_1_20_MAP_PALETTE[:64]),
+
+        # 1.18 - 1.19 Timeline
+        "1.19": (3105, MINECRAFT_1_18_MAP_PALETTE),
+        "1.18": (2975, MINECRAFT_1_18_MAP_PALETTE),
+        "1.18.2": (2975, MINECRAFT_1_18_MAP_PALETTE),
+        2975: (2975, MINECRAFT_1_18_MAP_PALETTE),
+
+        # 1.16 - 1.17 Timeline
+        "1.17": (2730, MINECRAFT_1_16_MAP_PALETTE),
+        "1.16": (2566, MINECRAFT_1_16_MAP_PALETTE),
+        2566: (2566, MINECRAFT_1_16_MAP_PALETTE),
+
+        # 1.12 - 1.15 Timeline
+        "1.15": (2230, MINECRAFT_1_12_MAP_PALETTE),
+        "1.12": (1139, MINECRAFT_1_12_MAP_PALETTE),
+        1139: (1139, MINECRAFT_1_12_MAP_PALETTE),
+
+        # 1.8 - 1.11 Timeline
+        "1.8": (99, MINECRAFT_1_8_MAP_PALETTE),
+        99: (99, MINECRAFT_1_8_MAP_PALETTE),
+
+        # Legacy
+        "1.7": (0, MINECRAFT_1_7_MAP_PALETTE),
+        0: (0, MINECRAFT_1_7_MAP_PALETTE)
+    }
+
+    # Normalize fallback resolution
+    if user_version not in VERSION_ROUTER:
+        logger.warning(
+            f"Target version '{user_version}' unrecognized. "
+            f"Defaulting map formatting output to Minecraft 1.20 rules."
+        )
+        user_version = "1.20"
+
+    data_version, selected_palette = VERSION_ROUTER[user_version]
+
+    # EVALUATE AND RESAMPLE GEOMETRY BOUNDS
+    width, height = im.size
+    aspect_ratio = width / height
+
+    if aspect_ratio > 1.8 or aspect_ratio < (1 / 1.8):
+        raise ValueError(
+            f"Image aspect ratio ({aspect_ratio:.2f}) is outside acceptable limits "
+            f"(1.8, 1/1.8). Pre-crop the image to avoid extreme distortion."
+        )
+
+    if im.size != (128, 128):
+        logger.warning(
+            f"Image dimensions {im.size} resized automatically to 128x128 for Minecraft compatibility."
+        )
+        # Use high-quality Resampling.LANCZOS for downscaling crisp details
+        im = im.resize((128, 128), resample=Image.Resampling.LANCZOS)
+
+    # 2. SEPARATE ALPHA TRANSPARENCY MASK FOR MINECRAFT INDEX 0
+    alpha_mask = None
+    if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+        logger.info("Alpha/Transparency transparency maps detected. Mapping to Map Air Index (0).")
+        # Split out alpha channel matrix
+        if im.mode != "RGBA":
+            im = im.convert("RGBA")
+        _, _, _, alpha_channel = im.split()
+        # Pixel index is 0 wherever transparency falls below a strict opacity threshold
+        alpha_mask = alpha_channel.point(lambda p: 255 if p < 128 else 0)
+
+    # 3. QUANTIZE TRUE COLOR CHANNELS TO MINECRAFT 1.20 PALETTE
+    logger.warning(f"Projecting image data down into Minecraft {user_version} color space palette.")
+
+    # Compile a flat 768-integer palette template required by PIL's quantize core
+    raw_palette = selected_palette
+    # Force a safety slice window down to exactly 64 base IDs (256 colors) max
+    # to ensure it strictly respects Pillow's 8-bit C limits.
+    # This keeps up to ID 63 (Terracotta Light Gray) and drops only the last 2 IDs.
+    safe_palette_base = raw_palette[:64]
+    # Flatten the list of RGB tuples into a 1D sequence of integers
+    flat_palette = [color for rgb in safe_palette_base for color in rgb]
+    padded_palette = flat_palette + [0] * (768 - len(flat_palette))
+
+    # Construct an anchor reference image containing our strict 1.20 palette layout
+    palette_anchor = Image.new("P", (1, 1))
+    palette_anchor.putpalette(padded_palette)
+
+    # Quantize the input image down to the closest matching palette colors using Floyd-Steinberg dithering
+    quantized_im = im.convert("RGB").quantize(palette=palette_anchor, dither=Image.Dither.FLOYDSTEINBERG)
+    pixel_bytes = bytearray(quantized_im.tobytes())
+
+    # 4. OVERLAY TRANSPARENCY BACK TO INDEX 0 IF APPLICABLE
+    if alpha_mask is not None:
+        transparent_bytes = alpha_mask.tobytes()
+        for idx in range(16384):
+            if transparent_bytes[idx] == 255:
+                pixel_bytes[idx] = 0  # Reassign value to ID 0 (Air/Transparent)
+
+    # 5. RETRIEVE METADATA VARIANTS OR APPLY IN-GAME DEFAULTS
+    x_center = im.info.get("x_center", 0)
+    z_center = im.info.get("z_center", 0)
+    scale = im.info.get("scale", 0)
+    data_version = im.info.get("data_version", data_version)  # Default to standard 1.20+
+
+    # 6. ASSEMBLE RAW BINARY NBT ARCHITECTURE CHUNKS
+    nbt_payload = bytearray()
+
+    # Root TAG_Compound
+    nbt_payload.append(0x0a)
+    nbt_payload.extend(_encode_nbt_string(""))
+
+    # DataVersion Tag (TAG_Int)
+    nbt_payload.append(0x03)
+    nbt_payload.extend(_encode_nbt_string("DataVersion"))
+    nbt_payload.extend(data_version.to_bytes(4, "big", signed=True))
+
+    # data TAG_Compound container entry point
+    nbt_payload.append(0x0a)
+    nbt_payload.extend(_encode_nbt_string("data"))
+
+    # xCenter
+    nbt_payload.append(0x03)
+    nbt_payload.extend(_encode_nbt_string("xCenter"))
+    nbt_payload.extend(x_center.to_bytes(4, "big", signed=True))
+
+    # zCenter
+    nbt_payload.append(0x03)
+    nbt_payload.extend(_encode_nbt_string("zCenter"))
+    nbt_payload.extend(z_center.to_bytes(4, "big", signed=True))
+
+    # scale
+    nbt_payload.append(0x01)
+    nbt_payload.extend(_encode_nbt_string("scale"))
+    nbt_payload.extend(scale.to_bytes(1, "big", signed=True))
+
+    # Standard boilerplate tracking tags
+    for tag_name, val in [("trackingPosition", 0), ("unlimitedTracking", 0), ("locked", 1)]:
+        nbt_payload.append(0x01)
+        nbt_payload.extend(_encode_nbt_string(tag_name))
+        nbt_payload.append(val)
+
+    # colors TAG_Byte_Array payload array injection block
+    nbt_payload.append(0x07)
+    nbt_payload.extend(_encode_nbt_string("colors"))
+    nbt_payload.extend(len(pixel_bytes).to_bytes(4, "big"))
+    nbt_payload.extend(pixel_bytes)
+
+    # Close data and root tags safely
+    nbt_payload.append(0x00)
+    nbt_payload.append(0x00)
+
+    # 7. EXPORT COMPRESSED STREAM TO DISK
+    with gzip.open(fp, mode="wb") as gz:
+        gz.write(nbt_payload)
+
+
+def register_minecraft_map():
     """Hooks the Minecraft decoder module into Pillow's driver registry."""
     if MinecraftMapImageFile.format not in Image.ID:
         Image.register_extensions(
@@ -287,3 +477,4 @@ def register_plugin():
             MinecraftMapImageFile,
             MinecraftMapImageFile.accept,
         )
+        Image.register_save(MinecraftMapImageFile.format, _save,)

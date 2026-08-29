@@ -1,4 +1,4 @@
-from .plugin import register_plugin
+from .plugin import register_minecraft_map
 
 # Automatically register when imported
-register_plugin()
+register_minecraft_map()
