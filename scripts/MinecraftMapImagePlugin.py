@@ -62,15 +62,19 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         except ValueError:
             # Fallback layout if DataVersion string signature is absent in older files
             data_version = 0
-        # Version Router Dictionary mapping to baseline version palettes
-        # Any version >= 3463 automatically acquires the 1.20 layout definitions
-        if data_version >= 3463:
+        # Version Router (Resolves historical scale shifts cleanly)
+        if data_version >= 3463:  # 1.20+
             raw_palette = MINECRAFT_1_20_MAP_PALETTE
-        elif data_version >= 2975:
+        elif data_version >= 2975:  # 1.18 - 1.19
             raw_palette = MINECRAFT_1_18_MAP_PALETTE
-        else:
-            # Safe historical fallback default mapping (1.18 base)
-            raw_palette = MINECRAFT_1_18_MAP_PALETTE
+        elif data_version >= 2566:  # 1.16 - 1.17
+            raw_palette = MINECRAFT_1_16_MAP_PALETTE
+        elif data_version >= 1139:  # 1.12 - 1.15
+            raw_palette = MINECRAFT_1_12_MAP_PALETTE
+        elif data_version >= 99:  # 1.8 - 1.11
+            raw_palette = MINECRAFT_1_8_MAP_PALETTE
+        else:  # Pre-1.8 Legacy Beta
+            raw_palette = MINECRAFT_1_7_MAP_PALETTE
         # Flatten the list of RGB tuples into a 1D sequence of integers
         flat_palette = [color for rgb in raw_palette for color in rgb]
         # Pad out to exactly 768 entries (256 colors * 3 channels) using zeros
@@ -92,10 +96,8 @@ Image.register_open(
     MinecraftMapImageFile.accept,
 )
 
-# Minecraft Java 1.18.2 (DataVersion 2975) complete Map Palette
-# Contains 244 RGB triples organized sequentially (4 shaded variants per base ID)
-# Order per ID: [Darkest (0), Darker (1), Normal (2), Brighter (3)]
-MINECRAFT_1_18_MAP_PALETTE = [
+# --- STEP 1: Baseline 1.7 Legacy Map Palette (14 base IDs / 56 colors) ---
+MINECRAFT_1_7_MAP_PALETTE = [
     # ID 0: Air / Transparent
     (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0),
     # ID 1: Grass
@@ -123,7 +125,11 @@ MINECRAFT_1_18_MAP_PALETTE = [
     # ID 12: Water
     (45, 45, 180), (55, 55, 220), (64, 64, 255), (33, 33, 135),
     # ID 13: Wood
-    (100, 84, 50), (123, 102, 62), (143, 119, 72), (75, 63, 38),
+    (100, 84, 50), (123, 102, 62), (143, 119, 72), (75, 63, 38)
+]
+
+# --- STEP 2: Release 1.8 to 1.11 Map Palette (Adds 16 wool colors + precious blocks -> 35 IDs) ---
+MINECRAFT_1_8_MAP_PALETTE = MINECRAFT_1_7_MAP_PALETTE + [
     # ID 14: Quartz
     (180, 177, 172), (220, 217, 211), (255, 252, 245), (135, 133, 129),
     # ID 15: Orange Wool
@@ -167,7 +173,11 @@ MINECRAFT_1_18_MAP_PALETTE = [
     # ID 34: Podzol
     (91, 60, 34), (111, 74, 42), (129, 86, 49), (68, 45, 25),
     # ID 35: Netherrack
-    (79, 1, 0), (96, 1, 0), (112, 2, 0), (59, 1, 0),
+    (79, 1, 0), (96, 1, 0), (112, 2, 0), (59, 1, 0)
+]
+
+# --- STEP 3: Release 1.12 to 1.15 Map Palette (Adds 16 Terracotta options -> 51 IDs) ---
+MINECRAFT_1_12_MAP_PALETTE = MINECRAFT_1_8_MAP_PALETTE + [
     # ID 36: White Terracotta
     (147, 124, 113), (180, 152, 138), (209, 177, 161), (110, 93, 85),
     # ID 37: Orange Terracotta
@@ -199,7 +209,11 @@ MINECRAFT_1_18_MAP_PALETTE = [
     # ID 50: Red Terracotta
     (100, 42, 32), (122, 51, 39), (142, 60, 46), (75, 31, 24),
     # ID 51: Black Terracotta
-    (26, 15, 11), (31, 18, 13), (37, 22, 16), (19, 11, 8),
+    (26, 15, 11), (31, 18, 13), (37, 22, 16), (19, 11, 8)
+]
+
+# --- STEP 4: Release 1.16 to 1.17 Map Palette (Adds Nether woods/nyliums -> 58 IDs) ---
+MINECRAFT_1_16_MAP_PALETTE = MINECRAFT_1_12_MAP_PALETTE + [
     # ID 52: Crimson Nylium
     (133, 33, 34), (163, 41, 42), (189, 48, 49), (100, 25, 25),
     # ID 53: Crimson Stem
@@ -213,7 +227,11 @@ MINECRAFT_1_18_MAP_PALETTE = [
     # ID 57: Warped Hyphae
     (60, 31, 43), (74, 37, 53), (86, 44, 62), (45, 23, 32),
     # ID 58: Warped Wart Block
-    (14, 127, 93), (17, 155, 114), (20, 180, 133), (10, 95, 70),
+    (14, 127, 93), (17, 155, 114), (20, 180, 133), (10, 95, 70)
+]
+
+# --- STEP 5: Release 1.18 to 1.19 Map Palette (Adds Deepslate, Raw Iron, Glow Lichen -> 61 IDs) ---
+MINECRAFT_1_18_MAP_PALETTE = MINECRAFT_1_16_MAP_PALETTE + [
     # ID 59: Deepslate
     (70, 70, 70), (86, 86, 86), (100, 100, 100), (52, 52, 52),
     # ID 60: Raw Iron
@@ -222,15 +240,15 @@ MINECRAFT_1_18_MAP_PALETTE = [
     (89, 117, 105), (109, 144, 129), (127, 167, 150), (67, 88, 79)
 ]
 
-# Minecraft 1.20+ (DataVersion 3463+) Map Palette adds 4 new block IDs (260 total colors)
+# --- STEP 6: Release 1.20+ Map Palette (Adds Copper variants, Cherry Wood -> 65 IDs) ---
 MINECRAFT_1_20_MAP_PALETTE = MINECRAFT_1_18_MAP_PALETTE + [
     # ID 62: Verdigris / Oxidized Copper
     (104, 154, 133), (127, 189, 163), (148, 219, 189), (78, 116, 100),
-    # ID 63: Terracotta Light Gray / Pale Purple (Clay / Mud Bricks variant)
+    # ID 63: Terracotta Light Gray / Pale Purple
     (79, 60, 52), (96, 74, 64), (112, 86, 75), (59, 45, 39),
     # ID 64: Cherry Wood / Pink Tint
     (149, 102, 116), (182, 124, 142), (211, 144, 165), (111, 76, 87),
-    # ID 65: Bogged / Mud / Mangrove Root (Dark Brown/Greenish variant)
+    # ID 65: Bogged / Mud / Mangrove Root
     (58, 48, 31), (71, 59, 38), (83, 69, 45), (43, 36, 23)
 ]
 
