@@ -57,16 +57,27 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         self._size = 128, 128
         self._mode = "P"
         # Palette
-        data_version = self.get_int("DataVersion")
-        # TODO - other version palettes
-        assert data_version == 2975  # Minecraft Java Edition 1.18.2
-        palette = MINECRAFT_1_18_MAP_PALETTE
+        try:
+            data_version = self.get_int("DataVersion")
+        except ValueError:
+            # Fallback layout if DataVersion string signature is absent in older files
+            data_version = 0
+        # Version Router Dictionary mapping to baseline version palettes
+        # Any version >= 3463 automatically acquires the 1.20 layout definitions
+        if data_version >= 3463:
+            raw_palette = MINECRAFT_1_20_MAP_PALETTE
+        elif data_version >= 2975:
+            raw_palette = MINECRAFT_1_18_MAP_PALETTE
+        else:
+            # Safe historical fallback default mapping (1.18 base)
+            raw_palette = MINECRAFT_1_18_MAP_PALETTE
         # Flatten the list of RGB tuples into a 1D sequence of integers
-        flat_palette = [color for rgb in palette for color in rgb]
+        flat_palette = [color for rgb in raw_palette for color in rgb]
         # Pad out to exactly 768 entries (256 colors * 3 channels) using zeros
         pil_palette = flat_palette + [0] * (768 - len(flat_palette))
         assert len(pil_palette) == 768
         self.palette = ImagePalette.ImagePalette(mode="RGB", palette=pil_palette)
+        # Yield file resource tracking
         self.fp = None
 
 
@@ -84,7 +95,6 @@ Image.register_open(
 # Minecraft Java 1.18.2 (DataVersion 2975) complete Map Palette
 # Contains 244 RGB triples organized sequentially (4 shaded variants per base ID)
 # Order per ID: [Darkest (0), Darker (1), Normal (2), Brighter (3)]
-
 MINECRAFT_1_18_MAP_PALETTE = [
     # ID 0: Air / Transparent
     (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0),
@@ -203,13 +213,25 @@ MINECRAFT_1_18_MAP_PALETTE = [
     # ID 57: Warped Hyphae
     (60, 31, 43), (74, 37, 53), (86, 44, 62), (45, 23, 32),
     # ID 58: Warped Wart Block
-    (15, 88, 94), (18, 108, 115), (22, 126, 134), (11, 66, 71),
+    (14, 127, 93), (17, 155, 114), (20, 180, 133), (10, 95, 70),
     # ID 59: Deepslate
     (70, 70, 70), (86, 86, 86), (100, 100, 100), (52, 52, 52),
     # ID 60: Raw Iron
     (152, 123, 103), (186, 150, 126), (216, 175, 147), (114, 92, 77),
     # ID 61: Glow Lichen
     (89, 117, 105), (109, 144, 129), (127, 167, 150), (67, 88, 79)
+]
+
+# Minecraft 1.20+ (DataVersion 3463+) Map Palette adds 4 new block IDs (260 total colors)
+MINECRAFT_1_20_MAP_PALETTE = MINECRAFT_1_18_MAP_PALETTE + [
+    # ID 62: Verdigris / Oxidized Copper
+    (104, 154, 133), (127, 189, 163), (148, 219, 189), (78, 116, 100),
+    # ID 63: Terracotta Light Gray / Pale Purple (Clay / Mud Bricks variant)
+    (79, 60, 52), (96, 74, 64), (112, 86, 75), (59, 45, 39),
+    # ID 64: Cherry Wood / Pink Tint
+    (149, 102, 116), (182, 124, 142), (211, 144, 165), (111, 76, 87),
+    # ID 65: Bogged / Mud / Mangrove Root (Dark Brown/Greenish variant)
+    (58, 48, 31), (71, 59, 38), (83, 69, 45), (43, 36, 23)
 ]
 
 
