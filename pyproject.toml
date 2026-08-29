@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pillow-minecraft-map"
-version = "1.0.0"
+version = "1.0.1a"
 description = "A Pillow Image plugin to open Minecraft .dat map files."
 readme = "README.md"
 authors = [

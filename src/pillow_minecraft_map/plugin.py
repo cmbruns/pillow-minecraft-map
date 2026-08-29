@@ -12,6 +12,8 @@ Limitations:
 
 
 import gzip
+from typing import cast, BinaryIO
+
 from PIL import Image, ImageFile, ImagePalette
 
 # --- HISTORICAL MAP PALETTES ---
@@ -193,20 +195,17 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
     def get_byte(self, tag: str) -> int:
         """Fetch an NBT single byte value by tag name."""
         pos = self._find_tag_payload(tag)
-        assert isinstance(self.file_bytes, bytes)
         return int.from_bytes(self.file_bytes[pos: pos + 1], "big", signed=True)
 
     def get_byte_array(self, tag: str) -> bytes:
         """Fetch an NBT byte array by tag name"""
         pos = self._find_tag_payload(tag)
-        assert isinstance(self.file_bytes, bytes)
         size = int.from_bytes(self.file_bytes[pos: pos + 4], "big")
         return self.file_bytes[pos + 4: pos + 4 + size]
 
     def get_int(self, tag: str) -> int:
         """Fetch an NBT integer value by tag name"""
         pos = self._find_tag_payload(tag)
-        assert isinstance(self.file_bytes, bytes)
         return int.from_bytes(self.file_bytes[pos: pos + 4], "big", signed=True)
 
     def load(self):
@@ -224,13 +223,15 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         """
         Reads the file header, sets metadata, and loads the small pixel array.
         """
+        self._pixels = None
         # 1. Rewind the stream and open it as a GZIP stream
-        self.fp.seek(0)
-        with gzip.open(self.fp, mode="rb") as gz:
+        fp = cast(BinaryIO, self.fp)  # to silence the PyCharm linter
+        fp.seek(0)
+        with gzip.open(fp, mode="rb") as gz:
             _fb = gz.read()
-            assert isinstance(_fb, bytes)
             self.file_bytes: bytes = _fb
         self._pixels = self.get_byte_array("colors")
+        assert isinstance(self._pixels, bytes)
         assert 128*128 == len(self._pixels)
         self._size = 128, 128
         # Handle color palette
@@ -265,7 +266,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         except ValueError:
             # Safe fallbacks if parsing legacy/custom map structures
             x_center, z_center, scale = 0, 0, 0
-        # Inject into Pillow's standard metadata API
+        # Inject into Pillow's metadata API
         self.info["x_center"] = x_center
         self.info["z_center"] = z_center
         self.info["scale"] = scale
