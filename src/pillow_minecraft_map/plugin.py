@@ -13,6 +13,7 @@ Limitations:
 
 import gzip
 import logging
+import re
 from typing import cast, BinaryIO
 from PIL import Image, ImageFile, ImagePalette
 
@@ -250,6 +251,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         self.info["z_center"] = z_center
         self.info["scale"] = scale
         self.info["data_version"] = data_version
+        self.info["transparency"] = 0
         # File handle is no longer needed now
         self.fp = None
 
@@ -259,70 +261,16 @@ def _encode_nbt_string(name: str) -> bytes:
     return len(encoded).to_bytes(2, "big") + encoded
 
 
-def _save(im: Image.Image, fp, filename):
+def _save(im: Image.Image, fp, _filename):
     """
     Saves a Pillow image structure back into a standard Minecraft Java .dat map item.
     Automatically handles resizing, alpha transparency layers, and color quantization.
     Supports optional version mapping parameters: im.save(fp, version="1.18")
     """
 
-    # READ OPTIONAL USER PARAMETER (Default to latest safe 1.20 profile)
-    user_version = im.encoderinfo.get("version", "1.20")
-    try:
-        # Try to handle a wider range of version identifiers
-        minor = int(str(user_version).split(".")[1])
-        if minor <= 0:
-            pass  # No idea
-        elif minor < 8:
-            user_version = "1.7"
-        elif minor < 12:
-            user_version = "1.8"
-        if minor >= 20:
-            user_version = "1.20"
-    except IndexError:
-        pass
-
-    # Map friendly versions and direct integer tags to baseline palettes
-    VERSION_ROUTER = {
-        # 1.20+ Timeline (Truncated safely to 64 Base IDs / 256 colors max)
-        "1.20": (3463, MINECRAFT_1_20_MAP_PALETTE[:64]),
-        "1.20.1": (3463, MINECRAFT_1_20_MAP_PALETTE[:64]),
-        3463: (3463, MINECRAFT_1_20_MAP_PALETTE[:64]),
-
-        # 1.18 - 1.19 Timeline
-        "1.19": (3105, MINECRAFT_1_18_MAP_PALETTE),
-        "1.18": (2975, MINECRAFT_1_18_MAP_PALETTE),
-        "1.18.2": (2975, MINECRAFT_1_18_MAP_PALETTE),
-        2975: (2975, MINECRAFT_1_18_MAP_PALETTE),
-
-        # 1.16 - 1.17 Timeline
-        "1.17": (2730, MINECRAFT_1_16_MAP_PALETTE),
-        "1.16": (2566, MINECRAFT_1_16_MAP_PALETTE),
-        2566: (2566, MINECRAFT_1_16_MAP_PALETTE),
-
-        # 1.12 - 1.15 Timeline
-        "1.15": (2230, MINECRAFT_1_12_MAP_PALETTE),
-        "1.12": (1139, MINECRAFT_1_12_MAP_PALETTE),
-        1139: (1139, MINECRAFT_1_12_MAP_PALETTE),
-
-        # 1.8 - 1.11 Timeline
-        "1.8": (99, MINECRAFT_1_8_MAP_PALETTE),
-        99: (99, MINECRAFT_1_8_MAP_PALETTE),
-
-        # Legacy
-        "1.7": (0, MINECRAFT_1_7_MAP_PALETTE),
-        0: (0, MINECRAFT_1_7_MAP_PALETTE)
-    }
-
-    # Normalize fallback resolution
-    if user_version not in VERSION_ROUTER:
-        logger.warning(
-            f"Target version '{user_version}' unrecognized. "
-            f"Defaulting map formatting output to Minecraft 1.20 rules."
-        )
-        user_version = "1.20"
-
-    data_version, selected_palette = VERSION_ROUTER[user_version]
+    # READ OPTIONAL USER PARAMETER (Default to latest safe profile)
+    user_version = im.encoderinfo.get("version", "26.2")
+    data_version, palette_size = palette_size_for_version(user_version)
 
     # EVALUATE AND RESAMPLE GEOMETRY BOUNDS
     width, height = im.size
@@ -356,13 +304,9 @@ def _save(im: Image.Image, fp, filename):
     logger.warning(f"Projecting image data down into Minecraft {user_version} color space palette.")
 
     # Compile a flat 768-integer palette template required by PIL's quantize core
-    raw_palette = selected_palette
-    # Force a safety slice window down to exactly 64 base IDs (256 colors) max
-    # to ensure it strictly respects Pillow's 8-bit C limits.
-    # This keeps up to ID 63 (Terracotta Light Gray) and drops only the last 2 IDs.
-    safe_palette_base = raw_palette[:64]
+    raw_palette = JE_1_17_PALETTE[: palette_size]
     # Flatten the list of RGB tuples into a 1D sequence of integers
-    flat_palette = [color for rgb in safe_palette_base for color in rgb]
+    flat_palette = [color for rgb in raw_palette for color in rgb]
     padded_palette = flat_palette + [0] * (768 - len(flat_palette))
 
     # Construct an anchor reference image containing our strict 1.20 palette layout
@@ -436,6 +380,50 @@ def _save(im: Image.Image, fp, filename):
     # 7. EXPORT COMPRESSED STREAM TO DISK
     with gzip.open(fp, mode="wb") as gz:
         gz.write(nbt_payload)
+
+
+def palette_size_for_version(version) -> tuple[int, int]:
+    """
+    Accepts Minecraft versions or DataVersions in many formats and returns
+    the correct palette truncation size (number of palette entries to keep).
+    """
+
+    # --- 1. Normalize input to string ---
+    v = str(version).strip().lower()
+
+    # --- 2. Handle DataVersion integers ---
+    # Pure integer? Treat as DataVersion.
+    if v.isdigit():
+        dv = int(v)
+        if dv < 1139:  # pre 1.12
+            return dv, 36*4
+        elif dv < 2566:  # pre 1.16
+            return dv, 52*4
+        else:  # post 1.17
+            return dv, 62*4
+
+    # --- 3. Handle beta versions ---
+    if v.startswith("beta") or v.startswith("b"):
+        return 0, 14*4  # TODO: betas after 1.6 might have more valid entries?
+
+    # --- 4. Extract numeric version components ---
+    # Examples: "1.12.2", "1.17", "26.2"
+    m = re.match(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?", v)
+    if m:
+        major = int(m.group(1))
+        minor = int(m.group(2) or 0)
+        patch = int(m.group(3) or 0)
+
+        if major < 1 or (major == 1 and minor <= 12):
+            return 99, 36*4  # at least back to 1.8.3 anyway
+        elif major == 1 and minor <= 16:
+            return 1139, 52*4
+        elif major == 1 and minor <= 17:
+            return 2566, 59*4
+        else:  # 1.17 through 26.2 and counting
+            return 2724, 62*4
+    # --- 5. Fallback: assume modern palette ---
+    return 2724, 62*4
 
 
 def register_minecraft_map():
