@@ -1,6 +1,8 @@
 # pillow-minecraft-map
 
-A plugin for [Pillow (PIL)](https://pillow.readthedocs.io) that enables loading, viewing, and manipulation of Minecraft `.dat` map item files. 
+A plugin for [Pillow (PIL)](https://pillow.readthedocs.io) that enables loading, viewing, saving, and manipulation of Minecraft `.dat` map item files. 
+
+<img width="400" alt="hopper map in minecraft" src="https://github.com/user-attachments/assets/e67ba40d-1baf-49b5-b6ff-2bda11a77362" />
 
 ## Features
 
