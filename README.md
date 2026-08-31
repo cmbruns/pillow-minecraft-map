@@ -66,6 +66,16 @@ with Image.open("tests/data/map_130.dat") as img:
     print(f"Scale: 1:{2**scale_factor} ({block_width}x{block_width} blocks total)")
 ```
 
+### Saving map files
+
+```python
+from PIL import Image
+import pillow_minecraft_map
+
+with Image.open("hopper.jpg") as img:
+    img.save("map_0.dat", format="MINECRAFT_MAP", version="26.2")
+```
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
