@@ -20,10 +20,13 @@ from PIL import Image, ImageFile, ImagePalette
 logger = logging.getLogger("PIL.MinecraftMapPlugin")
 
 # Version 1.17 is valid from version 1.17 onward at least to 26.2
-# and is a superset of palettes going back to 1.8.3 or earlier
+# and is a superset of palettes going back to 1.8.3 or earlier.
+# We use the darkest color (13,13,13) (black wool dark ID 119) for all the invalid
+# entries so the ditherer will give the best possible result.
+INVALID = (13, 13, 13)
 JE_1_17_PALETTE = [
     # ID 0->3: Air / Transparent
-    (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0),
+    INVALID, INVALID, INVALID, INVALID,
     # ID 4->7: Grass
     (89, 125, 39), (109, 153, 48), (127, 178, 56), (67, 94, 29),
     # ID 8->11: Sand
@@ -307,7 +310,7 @@ def _save(im: Image.Image, fp, _filename):
     raw_palette = JE_1_17_PALETTE[: palette_size]
     # Flatten the list of RGB tuples into a 1D sequence of integers
     flat_palette = [color for rgb in raw_palette for color in rgb]
-    padded_palette = flat_palette + [0] * (768 - len(flat_palette))
+    padded_palette = flat_palette + [13] * (768 - len(flat_palette))
 
     # Construct an anchor reference image containing our strict 1.20 palette layout
     palette_anchor = Image.new("P", (1, 1))
@@ -316,6 +319,13 @@ def _save(im: Image.Image, fp, _filename):
     # Quantize the input image down to the closest matching palette colors using Floyd-Steinberg dithering
     quantized_im = im.convert("RGB").quantize(palette=palette_anchor, dither=Image.Dither.FLOYDSTEINBERG)
     pixel_bytes = bytearray(quantized_im.tobytes())
+
+    # Replace invalid palette values with valid darkest black wool (119)
+    # BEFORE inserting the truly transparent values
+    for idx in range(16384):
+        pid = pixel_bytes[idx]
+        if pid in [0, 1, 2, 3] or pid >= len(flat_palette):
+            pixel_bytes[idx] = 119  # Reassign value to ID 119 (darkest black wool)
 
     # 4. OVERLAY TRANSPARENCY BACK TO INDEX 0 IF APPLICABLE
     if alpha_mask is not None:
@@ -357,15 +367,25 @@ def _save(im: Image.Image, fp, _filename):
     nbt_payload.extend(z_center.to_bytes(4, "big", signed=True))
 
     # scale
-    nbt_payload.append(0x01)
-    nbt_payload.extend(_encode_nbt_string("scale"))
-    nbt_payload.extend(scale.to_bytes(1, "big", signed=True))
+    if scale != 0:
+        nbt_payload.append(0x01)
+        nbt_payload.extend(_encode_nbt_string("scale"))
+        nbt_payload.extend(scale.to_bytes(1, "big", signed=True))
 
     # Standard boilerplate tracking tags
-    for tag_name, val in [("trackingPosition", 0), ("unlimitedTracking", 0), ("locked", 1)]:
+    for tag_name, val in [
+        # ("trackingPosition", 0),
+        # ("unlimitedTracking", 0),
+        ("locked", 1),
+    ]:
         nbt_payload.append(0x01)
         nbt_payload.extend(_encode_nbt_string(tag_name))
         nbt_payload.append(val)
+
+    # dimension
+    nbt_payload.append(0x08)  # TAG_String
+    nbt_payload.extend(_encode_nbt_string("dimension"))
+    nbt_payload.extend(_encode_nbt_string("minecraft:overworld"))
 
     # colors TAG_Byte_Array payload array injection block
     nbt_payload.append(0x07)
