@@ -341,9 +341,8 @@ def _save(im: Image.Image, fp, _filename):
                 pixel_bytes[idx] = 0  # Reassign value to ID 0 (Air/Transparent)
 
     # 5. RETRIEVE METADATA VARIANTS OR APPLY IN-GAME DEFAULTS
-    x_center = im.info.get("x_center", 0)
-    z_center = im.info.get("z_center", 0)
-    scale = im.info.get("scale", 0)
+    x_center = im.info.get("x_center", 20000)
+    z_center = im.info.get("z_center", 20000)
     data_version = im.info.get("data_version", data_version)  # Default to standard 1.20+
 
     # 6. ASSEMBLE RAW BINARY NBT ARCHITECTURE CHUNKS
@@ -365,6 +364,17 @@ def _save(im: Image.Image, fp, _filename):
     nbt_payload.append(0x0a)
     nbt_payload.extend(_encode_nbt_string("data"))
 
+    # width (TAG_Short = 0x02)
+    # required for 1.12
+    nbt_payload.append(0x02)
+    nbt_payload.extend(_encode_nbt_string("width"))
+    nbt_payload.extend((128).to_bytes(2, "big", signed=True))
+
+    # height (TAG_Short = 0x02)
+    nbt_payload.append(0x02)
+    nbt_payload.extend(_encode_nbt_string("height"))
+    nbt_payload.extend((128).to_bytes(2, "big", signed=True))
+
     # xCenter
     nbt_payload.append(0x03)
     nbt_payload.extend(_encode_nbt_string("xCenter"))
@@ -374,13 +384,6 @@ def _save(im: Image.Image, fp, _filename):
     nbt_payload.append(0x03)
     nbt_payload.extend(_encode_nbt_string("zCenter"))
     nbt_payload.extend(z_center.to_bytes(4, "big", signed=True))
-
-    # scale
-    # Not required in 26.2
-    # if scale != 0:
-    #     nbt_payload.append(0x01)
-    #     nbt_payload.extend(_encode_nbt_string("scale"))
-    #     nbt_payload.extend(scale.to_bytes(1, "big", signed=True))
 
     for tag_name, val in [
         ("trackingPosition", 0),
