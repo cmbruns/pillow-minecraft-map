@@ -19,14 +19,19 @@ from PIL import Image, ImageFile, ImagePalette
 
 logger = logging.getLogger("PIL.MinecraftMapPlugin")
 
+# We use the first stone color (79,79,79) for all the invalid
+# palette IDs so the PIL ditherer will give the best possible result.
+# This is the lowest ID for a uniform gray that is shared among all
+# historical palettes.
+# At save time, we will readjust the palette entries.
+OPAQUE_FILLER_COLOR = (79, 79, 79)
+OPAQUE_FILLER_ID = 44
+
 # Version 1.17 is valid from version 1.17 onward at least to 26.2
 # and is a superset of palettes going back to 1.8.3 or earlier.
-# We use the darkest color (13,13,13) (black wool dark ID 119) for all the invalid
-# entries so the ditherer will give the best possible result.
-INVALID = (13, 13, 13)
 JE_1_17_PALETTE = [
     # ID 0->3: Air / Transparent
-    INVALID, INVALID, INVALID, INVALID,
+    OPAQUE_FILLER_COLOR, OPAQUE_FILLER_COLOR, OPAQUE_FILLER_COLOR, OPAQUE_FILLER_COLOR,
     # ID 4->7: Grass
     (89, 125, 39), (109, 153, 48), (127, 178, 56), (67, 94, 29),
     # ID 8->11: Sand
@@ -310,7 +315,7 @@ def _save(im: Image.Image, fp, _filename):
     raw_palette = JE_1_17_PALETTE[: palette_size]
     # Flatten the list of RGB tuples into a 1D sequence of integers
     flat_palette = [color for rgb in raw_palette for color in rgb]
-    padded_palette = flat_palette + [13] * (768 - len(flat_palette))
+    padded_palette = flat_palette + [OPAQUE_FILLER_COLOR[0]] * (768 - len(flat_palette))
 
     # Construct an anchor reference image containing our strict 1.20 palette layout
     palette_anchor = Image.new("P", (1, 1))
@@ -320,12 +325,13 @@ def _save(im: Image.Image, fp, _filename):
     quantized_im = im.convert("RGB").quantize(palette=palette_anchor, dither=Image.Dither.FLOYDSTEINBERG)
     pixel_bytes = bytearray(quantized_im.tobytes())
 
-    # Replace invalid palette values with valid darkest black wool (119)
+    # Replace invalid palette values with OPAQUE_FILLER_COLOR
     # BEFORE inserting the truly transparent values
     for idx in range(16384):
         pid = pixel_bytes[idx]
-        if pid in [0, 1, 2, 3] or pid >= len(flat_palette):
-            pixel_bytes[idx] = 119  # Reassign value to ID 119 (darkest black wool)
+        if pid < 4 or pid >= len(flat_palette):
+            # This is the color PIL thought was at this index
+            pixel_bytes[idx] = OPAQUE_FILLER_ID
 
     # 4. OVERLAY TRANSPARENCY BACK TO INDEX 0 IF APPLICABLE
     if alpha_mask is not None:
@@ -348,9 +354,12 @@ def _save(im: Image.Image, fp, _filename):
     nbt_payload.extend(_encode_nbt_string(""))
 
     # DataVersion Tag (TAG_Int)
-    nbt_payload.append(0x03)
-    nbt_payload.extend(_encode_nbt_string("DataVersion"))
-    nbt_payload.extend(data_version.to_bytes(4, "big", signed=True))
+    # Not required in 26.2
+    # Not required in 1.17
+    # Not required in 1.15
+    # nbt_payload.append(0x03)
+    # nbt_payload.extend(_encode_nbt_string("DataVersion"))
+    # nbt_payload.extend(data_version.to_bytes(4, "big", signed=True))
 
     # data TAG_Compound container entry point
     nbt_payload.append(0x0a)
@@ -367,15 +376,15 @@ def _save(im: Image.Image, fp, _filename):
     nbt_payload.extend(z_center.to_bytes(4, "big", signed=True))
 
     # scale
-    if scale != 0:
-        nbt_payload.append(0x01)
-        nbt_payload.extend(_encode_nbt_string("scale"))
-        nbt_payload.extend(scale.to_bytes(1, "big", signed=True))
+    # Not required in 26.2
+    # if scale != 0:
+    #     nbt_payload.append(0x01)
+    #     nbt_payload.extend(_encode_nbt_string("scale"))
+    #     nbt_payload.extend(scale.to_bytes(1, "big", signed=True))
 
-    # Standard boilerplate tracking tags
     for tag_name, val in [
-        # ("trackingPosition", 0),
-        # ("unlimitedTracking", 0),
+        ("trackingPosition", 0),
+        ("unlimitedTracking", 0),
         ("locked", 1),
     ]:
         nbt_payload.append(0x01)
@@ -383,9 +392,13 @@ def _save(im: Image.Image, fp, _filename):
         nbt_payload.append(val)
 
     # dimension
-    nbt_payload.append(0x08)  # TAG_String
-    nbt_payload.extend(_encode_nbt_string("dimension"))
-    nbt_payload.extend(_encode_nbt_string("minecraft:overworld"))
+    # Not required in 26.2
+    # Required in 1.17
+    # Byte not string in 1.15 and earlier
+    if data_version > 2500:  # 1.16+, Uses string dimension
+        nbt_payload.append(0x08)  # TAG_String
+        nbt_payload.extend(_encode_nbt_string("dimension"))
+        nbt_payload.extend(_encode_nbt_string("minecraft:overworld"))
 
     # colors TAG_Byte_Array payload array injection block
     nbt_payload.append(0x07)
@@ -413,18 +426,23 @@ def palette_size_for_version(version) -> tuple[int, int]:
 
     # --- 2. Handle DataVersion integers ---
     # Pure integer? Treat as DataVersion.
+    # DataVersions did not exist before 1.9
     if v.isdigit():
         dv = int(v)
-        if dv < 1139:  # pre 1.12
-            return dv, 36*4
-        elif dv < 2566:  # pre 1.16
-            return dv, 52*4
+        if dv < 1:
+            return dv, 14*4  # Palette A, err on the side of caution
+        elif dv < 1000:  # pre 1.12
+            return dv, 36*4  # Palette B
+        elif dv < 2500:  # pre 1.16
+            return dv, 52*4  # Palette C
+        elif dv < 2700:  # pre 1.17
+            return dv, 59 * 4  # Palette D
         else:  # post 1.17
-            return dv, 62*4
+            return dv, 62*4  # Palette E
 
     # --- 3. Handle beta versions ---
     if v.startswith("beta") or v.startswith("b"):
-        return 0, 14*4  # TODO: betas after 1.6 might have more valid entries?
+        return 0, 14*4  # Palette A
 
     # --- 4. Extract numeric version components ---
     # Examples: "1.12.2", "1.17", "26.2"
@@ -432,17 +450,19 @@ def palette_size_for_version(version) -> tuple[int, int]:
     if m:
         major = int(m.group(1))
         minor = int(m.group(2) or 0)
-        patch = int(m.group(3) or 0)
+        _patch = int(m.group(3) or 0)
 
-        if major < 1 or (major == 1 and minor <= 12):
-            return 99, 36*4  # at least back to 1.8.3 anyway
+        if major < 1 or (major == 1 and minor <= 6):
+            return 0, 14*4  # Palette A
+        elif major == 1 and minor <= 12:
+            return 99, 36*4  # Palette B
         elif major == 1 and minor <= 16:
-            return 1139, 52*4
+            return 1139, 52*4  # Palette C
         elif major == 1 and minor <= 17:
-            return 2566, 59*4
+            return 2566, 59*4  # Palette D
         else:  # 1.17 through 26.2 and counting
-            return 2724, 62*4
-    # --- 5. Fallback: assume modern palette ---
+            return 2724, 62*4  # Palette E
+    # --- 5. Fallback: assume palette E ---
     return 2724, 62*4
 
 
