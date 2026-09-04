@@ -68,6 +68,8 @@ with Image.open("tests/data/map_130.dat") as img:
 
 ### Saving map files
 
+To see your image in-game, you must overwrite a map file previously created in-game.
+
 ```python
 from PIL import Image
 import pillow_minecraft_map
