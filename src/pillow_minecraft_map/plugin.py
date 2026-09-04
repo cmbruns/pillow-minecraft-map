@@ -27,148 +27,91 @@ logger = logging.getLogger("PIL.MinecraftMapPlugin")
 OPAQUE_FILLER_COLOR = (79, 79, 79)
 OPAQUE_FILLER_ID = 44
 
+# The early 56-entry palettes have some slightly different colors
+# Minecraft from version b1.6 to (release) 1.6.4
+# Transparent entries are replaced with stone color 0x4F4F4F for technical reasons
+JE_BETA1_6_PALETTE = [
+   0x4F4F4F, 0x4F4F4F, 0x4F4F4F, 0x4F4F4F,   # Air / Transparent  ID 0->3
+   0x597D27, 0x6D9930, 0x7FB238, 0x6D9930,   # Grass  ID 4->7
+   0xAEA473, 0xD5C98C, 0xF7E9A3, 0xD5C98C,   # Sand  ID 8->11
+   0x757575, 0x909090, 0xA7A7A7, 0x909090,   # Cloth / White Wool  ID 12->15
+   0xB40000, 0xDC0000, 0xFF0000, 0xDC0000,   # TNT / Fire / Lava  ID 16->19
+   0x7070B4, 0x8A8ADC, 0xA0A0FF, 0x8A8ADC,   # Ice  ID 20->23
+   0x757575, 0x909090, 0xA7A7A7, 0x909090,   # Iron / Metal  ID 24->27
+   0x005700, 0x006A00, 0x007C00, 0x006A00,   # Foliage / Plant  ID 28->31
+   0xB4B4B4, 0xDCDCDC, 0xFFFFFF, 0xDCDCDC,   # Snow  ID 32->35
+   0x737681, 0x8D909E, 0xA4A8B8, 0x8D909E,   # Clay  ID 36->39
+   0x814A21, 0x9D5B28, 0xB76A2F, 0x9D5B28,   # Dirt  ID 40->43
+   0x4F4F4F, 0x606060, 0x707070, 0x606060,   # Stone  ID 44->47
+   0x2D2DB4, 0x3737DC, 0x4040FF, 0x3737DC,   # Water  ID 48->51
+   0x493A23, 0x59472B, 0x685332, 0x59472B,   # Wood  ID 52->55
+]
+
 # Version 1.17 is valid from version 1.17 onward at least to 26.2
 # and is a superset of palettes going back to 1.8.3 or earlier.
 JE_1_17_PALETTE = [
-    # ID 0->3: Air / Transparent
-    OPAQUE_FILLER_COLOR, OPAQUE_FILLER_COLOR, OPAQUE_FILLER_COLOR, OPAQUE_FILLER_COLOR,
-    # ID 4->7: Grass
-    (89, 125, 39), (109, 153, 48), (127, 178, 56), (67, 94, 29),
-    # ID 8->11: Sand
-    (174, 164, 115), (213, 201, 140), (247, 233, 163), (130, 123, 86),
-    # ID 12->15: Cloth / White Wool
-    (140, 140, 140), (171, 171, 171), (199, 199, 199), (105, 105, 105),
-
-    # ID 16->19: TNT / Fire / Lava
-    (180, 0, 0), (220, 0, 0), (255, 0, 0), (135, 0, 0),
-    # ID 20->23: Ice
-    (112, 112, 180), (138, 138, 220), (160, 160, 255), (84, 84, 135),
-    # ID 24->27: Iron / Metal
-    (117, 117, 117), (144, 144, 144), (167, 167, 167), (88, 88, 88),
-    # ID 28->31: Foliage / Plant
-    (0, 87, 0), (0, 106, 0), (0, 124, 0), (0, 65, 0),
-
-    # ID 32->35: Snow
-    (180, 180, 180), (220, 220, 220), (255, 255, 255), (135, 135, 135),
-    # ID 36->39:  Clay
-    (115, 118, 129), (141, 144, 158), (164, 168, 184), (86, 88, 97),
-    # ID 40->43: Dirt
-    (106, 76, 54), (130, 94, 66), (151, 109, 77), (79, 57, 40),
-    # ID 44->47: Stone
-    (79, 79, 79), (96, 96, 96), (112, 112, 112), (59, 59, 59),
-
-    # ID 48->51: Water
-    (45, 45, 180), (55, 55, 220), (64, 64, 255), (33, 33, 135),
-    # ID 52->55: Wood
-    (100, 84, 50), (123, 102, 62), (143, 119, 72), (75, 63, 38),
-    # ID 56->59: Quartz
-    (180, 177, 172), (220, 217, 211), (255, 252, 245), (135, 133, 129),
-    # ID 60->63: Orange Wool
-    (152, 89, 36), (186, 109, 44), (216, 127, 51), (114, 67, 27),
-
-    # ID 64->67: Magenta Wool
-    (125, 53, 152), (153, 65, 186), (178, 76, 216), (94, 40, 114),
-    # ID 68->71: Light Blue Wool
-    (72, 108, 152), (88, 132, 186), (102, 153, 216), (54, 81, 114),
-    # ID 72->75: Yellow Wool
-    (161, 161, 36), (197, 197, 44), (229, 229, 51), (121, 121, 27),
-    # ID 76->79: Lime Wool
-    (89, 144, 17), (109, 176, 21), (127, 204, 25), (67, 108, 13),
-
-    # ID 80->83: Pink Wool
-    (170, 89, 116), (208, 109, 142), (242, 127, 165), (128, 67, 87),
-    # ID 84->87: Gray Wool
-    (53, 53, 53), (65, 65, 65), (76, 76, 76), (40, 40, 40),
-    # ID 88->91: Light Gray Wool
-    (108, 108, 108), (132, 132, 132), (153, 153, 153), (81, 81, 81),
-    # ID 92->95: Cyan Wool
-    (53, 89, 108), (65, 109, 132), (76, 127, 153), (40, 67, 81),
-
-    # ID 96->99: Purple Wool
-    (89, 44, 125), (109, 54, 153), (126, 63, 178), (67, 32, 94),
-    # ID 100->103: Blue Wool
-    (36, 53, 125), (44, 65, 153), (51, 76, 178), (27, 40, 94),
-    # ID 104->107: Brown Wool
-    (72, 53, 36), (88, 65, 44), (102, 76, 51), (54, 40, 27),
-    # ID 108->111: Green Wool
-    (72, 89, 36), (88, 109, 44), (101, 126, 50), (54, 67, 27),
-
-    # ID 112->115: Red Wool
-    (108, 36, 36), (132, 44, 44), (153, 51, 51), (81, 27, 27),
-    # ID 116->119: Black Wool
-    (17, 17, 17), (21, 21, 21), (25, 25, 25), (13, 13, 13),
-    # ID 120->123: Gold
-    (176, 168, 54), (215, 205, 66), (250, 238, 77), (132, 126, 40),
-    # ID 124->127: Diamond
-    (64, 154, 150), (79, 188, 183), (92, 219, 213), (48, 115, 112),
-
-    # ID 128->131: Lapis
-    (52, 90, 180), (63, 110, 220), (74, 128, 255), (39, 67, 135),
-    # ID 132->135: Emerald
-    (0, 153, 40), (0, 187, 50), (0, 217, 58), (0, 114, 30),
-    # ID 136->139: Podzol
-    (91, 60, 34), (111, 74, 42), (129, 86, 49), (68, 45, 25),
-    # ID 140->143: Netherrack
-    (79, 1, 0), (96, 1, 0), (112, 2, 0), (59, 1, 0),
-
-    # ID 144->147: White Terracotta
-    (147, 124, 113), (180, 152, 138), (208, 177, 161), (110, 93, 85),
-    # ID 148->151: Orange Terracotta
-    (112, 57, 25), (137, 70, 31), (159, 82, 36), (84, 43, 19),
-    # ID 152->155: Magenta Terracotta
-    (105, 61, 76), (128, 75, 93), (149, 87, 108), (78, 46, 57),
-    # ID 156->159: Light Blue Terracotta
-    (79, 76, 97), (96, 93, 119), (111, 108, 138), (59, 57, 73),
-
-    # ID 160->163: Yellow Terracotta
-    (131, 93, 25), (160, 114, 31), (186, 133, 36), (98, 70, 19),
-    # ID 164->167: Lime Terracotta
-    (72, 82, 37), (88, 100, 45), (103, 117, 53), (54, 61, 28),
-    # ID 168->171: Pink Terracotta
-    (112, 54, 55), (138, 66, 67), (160, 77, 78), (84, 40, 41),
-    # ID 172->175: Gray Terracotta
-    (40, 28, 24), (49, 35, 30), (57, 40, 35), (30, 21, 18),
-
-    # ID 176->179: Light Gray Terracotta
-    (95, 75, 69), (116, 92, 84), (135, 107, 98), (71, 56, 51),
-    # ID 180->183: Cyan Terracotta
-    (61, 64, 64), (75, 79, 79), (87, 92, 92), (46, 48, 48),
-    # ID 184->187: Purple Terracotta
-    (86, 51, 62), (105, 62, 75), (121, 73, 88), (64, 38, 46),
-    # ID 188->191: Blue Terracotta
-    (53, 43, 64), (65, 53, 79), (76, 62, 91), (40, 32, 48),
-
-    # ID 192->195: Brown Terracotta
-    (53, 35, 24), (65, 43, 30), (75, 50, 35), (40, 26, 18),
-    # ID 196->199: Green Terracotta
-    (53, 57, 29), (65, 70, 36), (76, 82, 42), (40, 43, 22),
-    # ID 200->203: Red Terracotta
-    (100, 42, 32), (122, 51, 39), (142, 60, 46), (75, 31, 24),
-    # ID 204->207: Black Terracotta
-    (26, 15, 11), (31, 18, 13), (37, 22, 16), (19, 11, 8),
-
-    # ID 208->211: Crimson Nylium
-    (133, 33, 34), (163, 41, 42), (188, 48, 49), (100, 25, 25),
-    # ID 212->215: Crimson Stem
-    (104, 44, 68), (127, 54, 83), (148, 63, 97), (78, 33, 51),
-    # ID 216->219: Crimson Hyphae
-    (64, 17, 20), (79, 21, 25), (92, 25, 29), (48, 13, 15),
-    # ID 220->223: Warped Nylium
-    (15, 88, 94), (18, 108, 115), (22, 126, 134), (11, 65, 70),
-
-    # ID 224->227: Warped Stem
-    (40, 100, 98), (50, 122, 120), (58, 142, 140), (30, 75, 74),
-    # ID 228->231: Warped Hyphae
-    (60, 31, 43), (74, 37, 53), (86, 44, 62), (45, 23, 32),
-    # ID 232->235: Warped Wart Block
-    (14, 127, 93), (17, 155, 114), (20, 180, 133), (10, 95, 70),
-    # ID 236->239: Deepslate
-    (70, 70, 70), (86, 86, 86), (100, 100, 100), (52, 52, 52),
-
-    # ID 240->243: Raw Iron
-    (152, 123, 103), (186, 150, 126), (216, 175, 147), (114, 92, 77),
-    # ID 244->247: Glow Lichen
-    (89, 117, 105), (109, 144, 129), (127, 167, 150), (67, 88, 79),
+    0x4F4F4F, 0x4F4F4F, 0x4F4F4F, 0x4F4F4F,  # Air / Transparent  ID 0->3
+    0x597D27, 0x6D9930, 0x7FB238, 0x435E1D,  # Grass  ID 4->7
+    0xAEA473, 0xD5C98C, 0xF7E9A3, 0x827B56,  # Sand  ID 8->11
+    0x8C8C8C, 0xABABAB, 0xC7C7C7, 0x696969,  # Cloth / White Wool  ID 12->15
+    0xB40000, 0xDC0000, 0xFF0000, 0x870000,  # TNT / Fire / Lava  ID 16->19
+    0x7070B4, 0x8A8ADC, 0xA0A0FF, 0x545487,  # Ice  ID 20->23
+    0x757575, 0x909090, 0xA7A7A7, 0x585858,  # Iron / Metal  ID 24->27
+    0x005700, 0x006A00, 0x007C00, 0x004100,  # Foliage / Plant  ID 28->31
+    0xB4B4B4, 0xDCDCDC, 0xFFFFFF, 0x878787,  # Snow  ID 32->35
+    0x737681, 0x8D909E, 0xA4A8B8, 0x565861,  # Clay  ID 36->39
+    0x6A4C36, 0x825E42, 0x976D4D, 0x4F3928,  # Dirt  ID 40->43
+    0x4F4F4F, 0x606060, 0x707070, 0x3B3B3B,  # Stone  ID 44->47
+    0x2D2DB4, 0x3737DC, 0x4040FF, 0x212187,  # Water  ID 48->51
+    0x645432, 0x7B663E, 0x8F7748, 0x4B3F26,  # Wood  ID 52->55
+    0xB4B1AC, 0xDCD9D3, 0xFFFCF5, 0x878581,  # Quartz  ID 56->59
+    0x985924, 0xBA6D2C, 0xD87F33, 0x72431B,  # Orange Wool  ID 60->63
+    0x7D3598, 0x9941BA, 0xB24CD8, 0x5E2872,  # Magenta Wool  ID 64->67
+    0x486C98, 0x5884BA, 0x6699D8, 0x365172,  # Light Blue Wool  ID 68->71
+    0xA1A124, 0xC5C52C, 0xE5E533, 0x79791B,  # Yellow Wool  ID 72->75
+    0x599011, 0x6DB015, 0x7FCC19, 0x436C0D,  # Lime Wool  ID 76->79
+    0xAA5974, 0xD06D8E, 0xF27FA5, 0x804357,  # Pink Wool  ID 80->83
+    0x353535, 0x414141, 0x4C4C4C, 0x282828,  # Gray Wool  ID 84->87
+    0x6C6C6C, 0x848484, 0x999999, 0x515151,  # Light Gray Wool  ID 88->91
+    0x35596C, 0x416D84, 0x4C7F99, 0x284351,  # Cyan Wool  ID 92->95
+    0x592C7D, 0x6D3699, 0x7F3FB2, 0x43215E,  # Purple Wool  ID 96->99
+    0x24357D, 0x2C4199, 0x334CB2, 0x1B285E,  # Blue Wool  ID 100->103
+    0x483524, 0x58412C, 0x664C33, 0x36281B,  # Brown Wool  ID 104->107
+    0x485924, 0x586D2C, 0x667F33, 0x36431B,  # Green Wool  ID 108->111
+    0x6C2424, 0x842C2C, 0x993333, 0x511B1B,  # Red Wool  ID 112->115
+    0x111111, 0x151515, 0x191919, 0x0D0D0D,  # Black Wool  ID 116->119
+    0xB0A836, 0xD7CD42, 0xFAEE4D, 0x847E28,  # Gold  ID 120->123
+    0x409A96, 0x4FBCB7, 0x5CDBD5, 0x307370,  # Diamond  ID 124->127
+    0x345AB4, 0x3F6EDC, 0x4A80FF, 0x274387,  # Lapis  ID 128->131
+    0x009928, 0x00BB32, 0x00D93A, 0x00721E,  # Emerald  ID 132->135
+    0x5B3C22, 0x6F4A2A, 0x815631, 0x442D19,  # Podzol  ID 136->139
+    0x4F0100, 0x600100, 0x700200, 0x3B0100,  # Netherrack  ID 140->143
+    0x937C71, 0xB4988A, 0xD1B1A1, 0x6E5D55,  # White Terracotta  ID 144->147
+    0x703919, 0x89461F, 0x9F5224, 0x542B13,  # Orange Terracotta  ID 148->151
+    0x693D4C, 0x804B5D, 0x95576C, 0x4E2E39,  # Magenta Terracotta  ID 152->155
+    0x4F4C61, 0x605D77, 0x706C8A, 0x3B3949,  # Light Blue Terracotta  ID 156->159
+    0x835D19, 0xA0721F, 0xBA8524, 0x624613,  # Yellow Terracotta  ID 160->163
+    0x485225, 0x58642D, 0x677535, 0x363D1C,  # Lime Terracotta  ID 164->167
+    0x703637, 0x8A4243, 0xA04D4E, 0x542829,  # Pink Terracotta  ID 168->171
+    0x281C18, 0x31231E, 0x392923, 0x1E1512,  # Gray Terracotta  ID 172->175
+    0x5F4B45, 0x745C54, 0x876B62, 0x473833,  # Light Gray Terracotta  ID 176->179
+    0x3D4040, 0x4B4F4F, 0x575C5C, 0x2E3030,  # Cyan Terracotta  ID 180->183
+    0x56333E, 0x693E4B, 0x7A4958, 0x40262E,  # Purple Terracotta  ID 184->187
+    0x352B40, 0x41354F, 0x4C3E5C, 0x282030,  # Blue Terracotta  ID 188->191
+    0x352318, 0x412B1E, 0x4C3223, 0x281A12,  # Brown Terracotta  ID 192->195
+    0x35391D, 0x414624, 0x4C522A, 0x282B16,  # Green Terracotta  ID 196->199
+    0x642A20, 0x7A3327, 0x8E3C2E, 0x4B1F18,  # Red Terracotta  ID 200->203
+    0x1A0F0B, 0x1F120D, 0x251610, 0x130B08,  # Black Terracotta  ID 204->207
+    0x852122, 0xA3292A, 0xBD3031, 0x641919,  # Crimson Nylium  ID 208->211
+    0x682C44, 0x7F3653, 0x943F61, 0x4E2133,  # Crimson Stem  ID 212->215
+    0x401114, 0x4F1519, 0x5C191D, 0x300D0F,  # Crimson Hyphae  ID 216->219
+    0x0F585E, 0x126C73, 0x167E86, 0x0B4246,  # Warped Nylium  ID 220->223
+    0x286462, 0x327A78, 0x3A8E8C, 0x1E4B4A,  # Warped Stem  ID 224->227
+    0x3C1F2B, 0x4A2535, 0x562C3E, 0x2D1720,  # Warped Hyphae  ID 228->231
+    0x0E7F5D, 0x119B72, 0x14B485, 0x0A5F46,  # Warped Wart Block  ID 232->235
+    0x464646, 0x565656, 0x646464, 0x343434,  # Deepslate  ID 236->239
+    0x987B67, 0xBA967E, 0xD8AF93, 0x725C4D,  # Raw Iron  ID 240->243
+    0x597569, 0x6D9081, 0x7FA796, 0x43584F,  # Glow Lichen  ID 244->247
 ]
 
 
@@ -242,7 +185,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         raw_palette = JE_1_17_PALETTE  # Mostly valid back to before 1.8.3
         # TODO: support minor variations, and very old palettes like beta1.6 etc.
         # Flatten the list of RGB tuples into a 1D sequence of integers
-        flat_palette = [color for rgb in raw_palette for color in rgb]
+        flat_palette = [color for rgb in raw_palette for color in rgb_from_int(rgb)]
         # Pad out to exactly 768 entries (256 colors * 3 channels) using zeros
         pil_palette = flat_palette + [0] * (768 - len(flat_palette))
         self.palette = ImagePalette.ImagePalette(mode="RGB", palette=pil_palette)
@@ -312,9 +255,12 @@ def _save(im: Image.Image, fp, _filename):
     logger.warning(f"Projecting image data down into Minecraft {user_version} color space palette.")
 
     # Compile a flat 768-integer palette template required by PIL's quantize core
-    raw_palette = JE_1_17_PALETTE[: palette_size]
+    if palette_size == 56:  # Oldest palettes had some slightly different colors
+        raw_palette = JE_BETA1_6_PALETTE
+    else:
+        raw_palette = JE_1_17_PALETTE[: palette_size]
     # Flatten the list of RGB tuples into a 1D sequence of integers
-    flat_palette = [color for rgb in raw_palette for color in rgb]
+    flat_palette = [color for rgb in raw_palette for color in rgb_from_int(rgb)]
     padded_palette = flat_palette + [OPAQUE_FILLER_COLOR[0]] * (768 - len(flat_palette))
 
     # Construct an anchor reference image containing our strict 1.20 palette layout
@@ -482,3 +428,11 @@ def register_minecraft_map():
             MinecraftMapImageFile.accept,
         )
         Image.register_save(MinecraftMapImageFile.format, _save,)
+
+
+def rgb_from_int(val: int = 0xFFFFFF) -> tuple[int, int, int]:
+    return (
+        (val >> 16) & 0xFF,  # R
+        (val >> 8) & 0xFF,  # G
+        val & 0xFF  # B
+    )

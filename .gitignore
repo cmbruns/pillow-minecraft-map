@@ -2,3 +2,4 @@
 /.venv
 /src/pillow_minecraft_map/__pycache__
 /dist
+/tests/map_666.dat

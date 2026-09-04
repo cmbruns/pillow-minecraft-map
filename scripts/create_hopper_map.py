@@ -1,11 +1,9 @@
 from PIL import Image
 import pillow_minecraft_map  # "unused" import loads the plugin as a side effect
 
-version = "26.2"
 with Image.open("../tests/data/hopper.jpg") as img:
     img.save(
-        # fp=f"../tests/images/{version}/hopper.dat",
-        fp=r"C:\Users\cmbruns\AppData\Roaming\.minecraft\saves\1_17\data\map_0.dat",
+        fp=r"C:\Users\cmbruns\AppData\Roaming\.minecraft\saves\Creative26_2\data\minecraft\maps\3.dat",
         format="MINECRAFT_MAP",
-        version=version,
+        version=26.2,
     )

@@ -50,7 +50,13 @@ def insert_index_map(map_name: str, max_palette: int = 144):
     print("Wrote", output_file_name)
 
 
+# max_palette
+#   56 for b1.6 -> (release)1.6.4
+#  144 for 1.7 -> 1.11.2
+#  207 for 1.12 -> 1.15.2
+#  236 for 1.16 -> 1.16.5
+#  248 for 1.17 -> 26.2 and maybe more
 insert_index_map(
-    map_name=r"C:\Users\cmbruns\AppData\Roaming\.minecraft\saves\1_14_3\data\map_0.dat",
-    max_palette=208,
+    map_name=r"C:\Users\cmbruns\Documents\git\fullbright117\run\saves\1_17_1\data\map_1.dat",
+    max_palette=248,
 )

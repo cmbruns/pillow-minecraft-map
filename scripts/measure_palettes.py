@@ -64,7 +64,9 @@ base_comments = [
     "# Warped Wart Block  ID 232->235", 
     "# Deepslate  ID 236->239", 
     "# Raw Iron  ID 240->243", 
-    "# Glow Lichen  ID 244->247", 
+    "# Glow Lichen  ID 244->247",
+    "# Air / Transparent  ID 248->251",
+    "# Air / Transparent  ID 252->255",
 ]
 
 
@@ -94,26 +96,41 @@ for image_path in glob("../tests/images/*.*/*.png"):
 versions = sorted(version_paths.keys(), key=split_version)
 
 
+# Fortunately blank map background colors never? appear in real palettes
+background_colors = [
+    "0xA4917C", "0xBEA985", "0xBEA885", "0xC5AE8A", "0xC2AC88", "0xC5AF8A", "0xC9B28D",
+]
+
+
 for version in versions:
     assert isinstance(version, str)
     image_path = version_paths[version]
     image = Image.open(image_path)
     v = version.replace(".", "_").upper()
-    print(f"JE_{v}_PALLETTE = [")
+    print(f"JE_{v}_PALETTE = [")
     stride = 50.875  # pixels per palette block
     for row in range(16):
         y = int(89.5 + (0.5 + row) * stride)
         for col in range(16):
+            x = int(552.5 + (0.5 + col) * stride)
+            rgb = image.getpixel((x, y))
+            assert isinstance(rgb, tuple)
+            r, g, b = rgb[0:3]
+            if row == 0 and col < 4:
+                r, g, b = 0, 0, 0  # The first 4 items are transparent
+            hex_str = f"0x{r:02X}{g:02X}{b:02X}"
+            if hex_str in background_colors:
+                row = None
+                break
             if col % 4 == 0:
                 print("   ", end="")  # indent
-            x = int(552.5 + (0.5 + col) * stride)
-            r, g, b = image.getpixel((x, y))[0:3]
-            hex_str = f"0x{r:02X}{g:02X}{b:02X}"
             print(f"{hex_str}, ", end="")
             if col % 4 == 3:
                 ix = 4 * row + col//4
                 if ix >= len(base_comments):
                     ix = 0  # Air for other entries
                 print(f"  {base_comments[ix]}")  # One quartet per line
+        if row is None:
+            break
     print("]")
     print("")
