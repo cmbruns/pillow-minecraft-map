@@ -27,29 +27,13 @@ logger = logging.getLogger("PIL.MinecraftMapPlugin")
 OPAQUE_FILLER_COLOR = (79, 79, 79)
 OPAQUE_FILLER_ID = 44
 
-# The early 56-entry palettes have some slightly different colors
-# Minecraft from version b1.6 to (release) 1.6.4
-# Transparent entries are replaced with stone color 0x4F4F4F for technical reasons
-JE_BETA1_6_PALETTE = [
-   0x4F4F4F, 0x4F4F4F, 0x4F4F4F, 0x4F4F4F,   # Air / Transparent  ID 0->3
-   0x597D27, 0x6D9930, 0x7FB238, 0x6D9930,   # Grass  ID 4->7
-   0xAEA473, 0xD5C98C, 0xF7E9A3, 0xD5C98C,   # Sand  ID 8->11
-   0x757575, 0x909090, 0xA7A7A7, 0x909090,   # Cloth / White Wool  ID 12->15
-   0xB40000, 0xDC0000, 0xFF0000, 0xDC0000,   # TNT / Fire / Lava  ID 16->19
-   0x7070B4, 0x8A8ADC, 0xA0A0FF, 0x8A8ADC,   # Ice  ID 20->23
-   0x757575, 0x909090, 0xA7A7A7, 0x909090,   # Iron / Metal  ID 24->27
-   0x005700, 0x006A00, 0x007C00, 0x006A00,   # Foliage / Plant  ID 28->31
-   0xB4B4B4, 0xDCDCDC, 0xFFFFFF, 0xDCDCDC,   # Snow  ID 32->35
-   0x737681, 0x8D909E, 0xA4A8B8, 0x8D909E,   # Clay  ID 36->39
-   0x814A21, 0x9D5B28, 0xB76A2F, 0x9D5B28,   # Dirt  ID 40->43
-   0x4F4F4F, 0x606060, 0x707070, 0x606060,   # Stone  ID 44->47
-   0x2D2DB4, 0x3737DC, 0x4040FF, 0x3737DC,   # Water  ID 48->51
-   0x493A23, 0x59472B, 0x685332, 0x59472B,   # Wood  ID 52->55
-]
-
-# Version 1.17 is valid from version 1.17 onward at least to 26.2
-# and is a superset of palettes going back to 1.8.3 or earlier.
+# Version 1.17 is valid from Minecraft version 1.17 onward at least to 26.2
+# and is a superset of palettes going back to version 1.7.
+# Transparent entries are replaced with stone color 0x4F4F4F as part
+# of a trick for handling both dithering and transparency.
 JE_1_17_PALETTE = [
+    # dark    normal    bright    darkest/unused
+    # ------  --------  --------  --------
     0x4F4F4F, 0x4F4F4F, 0x4F4F4F, 0x4F4F4F,  # Air / Transparent  ID 0->3
     0x597D27, 0x6D9930, 0x7FB238, 0x435E1D,  # Grass  ID 4->7
     0xAEA473, 0xD5C98C, 0xF7E9A3, 0x827B56,  # Sand  ID 8->11
@@ -112,6 +96,29 @@ JE_1_17_PALETTE = [
     0x464646, 0x565656, 0x646464, 0x343434,  # Deepslate  ID 236->239
     0x987B67, 0xBA967E, 0xD8AF93, 0x725C4D,  # Raw Iron  ID 240->243
     0x597569, 0x6D9081, 0x7FA796, 0x43584F,  # Glow Lichen  ID 244->247
+]
+
+# The early 56-entry palettes have some slightly different colors
+# in Minecraft versions from Beta1.6 through (release) 1.0 to 1.6.4
+# Transparent entries are replaced with stone color 0x4F4F4F as part
+# of a trick for handling both dithering and transparency.
+JE_BETA1_6_PALETTE = [
+    # dark    normal    bright    darkest/unused
+    # ------  --------  --------  --------
+    0x4F4F4F, 0x4F4F4F, 0x4F4F4F, 0x4F4F4F,   # Air / Transparent  ID 0->3
+    0x597D27, 0x6D9930, 0x7FB238, 0x6D9930,   # Grass  ID 4->7
+    0xAEA473, 0xD5C98C, 0xF7E9A3, 0xD5C98C,   # Sand  ID 8->11
+    0x757575, 0x909090, 0xA7A7A7, 0x909090,   # Cloth / White Wool  ID 12->15
+    0xB40000, 0xDC0000, 0xFF0000, 0xDC0000,   # TNT / Fire / Lava  ID 16->19
+    0x7070B4, 0x8A8ADC, 0xA0A0FF, 0x8A8ADC,   # Ice  ID 20->23
+    0x757575, 0x909090, 0xA7A7A7, 0x909090,   # Iron / Metal  ID 24->27
+    0x005700, 0x006A00, 0x007C00, 0x006A00,   # Foliage / Plant  ID 28->31
+    0xB4B4B4, 0xDCDCDC, 0xFFFFFF, 0xDCDCDC,   # Snow  ID 32->35
+    0x737681, 0x8D909E, 0xA4A8B8, 0x8D909E,   # Clay  ID 36->39
+    0x814A21, 0x9D5B28, 0xB76A2F, 0x9D5B28,   # Dirt  ID 40->43
+    0x4F4F4F, 0x606060, 0x707070, 0x606060,   # Stone  ID 44->47
+    0x2D2DB4, 0x3737DC, 0x4040FF, 0x3737DC,   # Water  ID 48->51
+    0x493A23, 0x59472B, 0x685332, 0x59472B,   # Wood  ID 52->55
 ]
 
 
