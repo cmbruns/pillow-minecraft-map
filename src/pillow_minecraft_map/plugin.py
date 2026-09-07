@@ -29,12 +29,10 @@ OPAQUE_FILLER_ID = 44
 
 # Version 1.17 is valid from Minecraft version 1.17 onward at least to 26.2
 # and is a superset of palettes going back to version 1.7.
-# Transparent entries are replaced with stone color 0x4F4F4F as part
-# of a trick for handling both dithering and transparency.
 JE_1_17_PALETTE = [
     # dark    normal    bright    darkest/unused
     # ------  --------  --------  --------
-    0x4F4F4F, 0x4F4F4F, 0x4F4F4F, 0x4F4F4F,  # Air / Transparent  ID 0->3
+    0x000000, 0x000000, 0x000000, 0x000000,  # Air / Transparent  ID 0->3
     0x597D27, 0x6D9930, 0x7FB238, 0x435E1D,  # Grass  ID 4->7
     0xAEA473, 0xD5C98C, 0xF7E9A3, 0x827B56,  # Sand  ID 8->11
     0x8C8C8C, 0xABABAB, 0xC7C7C7, 0x696969,  # Cloth / White Wool  ID 12->15
@@ -100,12 +98,10 @@ JE_1_17_PALETTE = [
 
 # The early 56-entry palettes have some slightly different colors
 # in Minecraft versions from Beta1.6 through (release) 1.0 to 1.6.4
-# Transparent entries are replaced with stone color 0x4F4F4F as part
-# of a trick for handling both dithering and transparency.
 JE_BETA1_6_PALETTE = [
     # dark    normal    bright    darkest/unused
     # ------  --------  --------  --------
-    0x4F4F4F, 0x4F4F4F, 0x4F4F4F, 0x4F4F4F,   # Air / Transparent  ID 0->3
+    0x000000, 0x000000, 0x000000, 0x000000,   # Air / Transparent  ID 0->3
     0x597D27, 0x6D9930, 0x7FB238, 0x6D9930,   # Grass  ID 4->7
     0xAEA473, 0xD5C98C, 0xF7E9A3, 0xD5C98C,   # Sand  ID 8->11
     0x757575, 0x909090, 0xA7A7A7, 0x909090,   # Cloth / White Wool  ID 12->15
@@ -268,6 +264,8 @@ def _save(im: Image.Image, fp, _filename):
         raw_palette = JE_1_17_PALETTE[: palette_size]
     # Flatten the list of RGB tuples into a 1D sequence of integers
     flat_palette = [color for rgb in raw_palette for color in rgb_from_int(rgb)]
+    # Insert stone color for all invalid entries
+    flat_palette[0:16] = [OPAQUE_FILLER_COLOR[0]] * 16
     padded_palette = flat_palette + [OPAQUE_FILLER_COLOR[0]] * (768 - len(flat_palette))
 
     # Construct an anchor reference image containing our strict 1.20 palette layout
