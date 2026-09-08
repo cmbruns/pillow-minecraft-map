@@ -19,14 +19,6 @@ from PIL import Image, ImageFile, ImagePalette
 
 logger = logging.getLogger("PIL.MinecraftMapPlugin")
 
-# We use the first stone color (79,79,79) for all the invalid
-# palette IDs so the PIL ditherer will give the best possible result.
-# This is the lowest ID for a uniform gray that is shared among all
-# historical palettes.
-# At save time, we will readjust the palette entries.
-OPAQUE_FILLER_COLOR = (79, 79, 79)
-OPAQUE_FILLER_ID = 44
-
 # Version 1.17 is valid from Minecraft version 1.17 onward at least to 26.2
 # and is a superset of palettes going back to version 1.7.
 JE_1_17_PALETTE = [
@@ -223,6 +215,7 @@ def _save(im: Image.Image, fp, _filename):
     """
 
     # READ OPTIONAL USER PARAMETER (Default to latest safe profile)
+    dither = im.encoderinfo.get("dither", Image.Dither.FLOYDSTEINBERG)
     user_version = im.encoderinfo.get("version", "26.2")
     data_version, palette_size = palette_size_for_version(user_version)
 
@@ -264,6 +257,14 @@ def _save(im: Image.Image, fp, _filename):
         raw_palette = JE_1_17_PALETTE[: palette_size]
     # Flatten the list of RGB tuples into a 1D sequence of integers
     flat_palette = [color for rgb in raw_palette for color in rgb_from_int(rgb)]
+
+    # We use the first stone color (79,79,79) for all the invalid
+    # palette IDs so the PIL ditherer will give the best possible result.
+    # This is the lowest ID for a uniform gray that is shared among all
+    # historical palettes.
+    # At save time, we will readjust the palette entries.
+    OPAQUE_FILLER_COLOR = (79, 79, 79)
+    OPAQUE_FILLER_ID = 44
     # Insert stone color for all invalid entries
     flat_palette[0:16] = [OPAQUE_FILLER_COLOR[0]] * 16
     padded_palette = flat_palette + [OPAQUE_FILLER_COLOR[0]] * (768 - len(flat_palette))
@@ -273,7 +274,7 @@ def _save(im: Image.Image, fp, _filename):
     palette_anchor.putpalette(padded_palette)
 
     # Quantize the input image down to the closest matching palette colors using Floyd-Steinberg dithering
-    quantized_im = im.convert("RGB").quantize(palette=palette_anchor, dither=Image.Dither.FLOYDSTEINBERG)
+    quantized_im = im.convert("RGB").quantize(palette=palette_anchor, dither=dither)
     pixel_bytes = bytearray(quantized_im.tobytes())
 
     # Replace invalid palette values with OPAQUE_FILLER_COLOR
