@@ -11,8 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Test against multiple Python versions to guarantee compatibility
-        python-version: ["3.10", "3.11", "3.12"]
+        os: [
+          "macos-latest",
+          "ubuntu-latest",
+        ]
+        # Monitor upstream PIL supported versions at
+        # https://github.com/python-pillow/Pillow/blob/main/.github/workflows/test.yml
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
 
     steps:
     - name: Check out repository code
