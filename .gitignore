@@ -4,3 +4,4 @@
 /dist
 /tests/map_666.dat
 *.pyc
+/.pytest_cache
