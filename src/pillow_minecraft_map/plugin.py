@@ -8,6 +8,29 @@ Minecraft Java Edition map info files are gzipped NBT files.
 Limitations:
   * Support for Minecraft Jave Edition map info files only. Bedrock Edition maps
   are not currently supported.
+
+List of NBT tags that occur in EVERY minecraft map file:
+  * data.dimension (integer pre 1.16, string 1.16+)
+  * data.scale (optional in 26+ if zero) (always 3 in earliest versions)
+  * data.xCenter
+  * data.zCenter
+  * data.colors (the only tag required for this plugin)
+
+List of NBT tags that occur in SOME minecraft map files:
+  * data.banners (1.13+) (optional in 26+ if empty)
+  * data.frames (1.14+) (optional in 26+ if empty)
+  * data.height (before 1.13) (always 128)
+  * data.locked (1.14+) (optional in 26+ if False)
+  * data.trackingPosition (1.9+) (optional in 26+ if True)
+  * data.unlimitedTracking (1.11+) (optional in 26+ if False)
+  * data.width (before 1.13) (always 128)
+  * DataVersion (1.13+)
+
+List of NBT tags that occur in NO minecraft map files:
+  * Data (level.dat)
+  * Data.Player(level.dat)
+  * map (idcounts.dat)
+
 """
 
 
@@ -215,9 +238,9 @@ def _save(im: Image.Image, fp, _filename):
     """
 
     # READ OPTIONAL USER PARAMETER (Default to latest safe profile)
-    dither = im.encoderinfo.get("dither", Image.Dither.FLOYDSTEINBERG)
     user_version = im.encoderinfo.get("version", "26.2")
     data_version, palette_size = palette_size_for_version(user_version)
+    data_version = im.info.get("data_version", data_version)  # Default to standard 1.20+
 
     # EVALUATE AND RESAMPLE GEOMETRY BOUNDS
     width, height = im.size
@@ -274,6 +297,7 @@ def _save(im: Image.Image, fp, _filename):
     palette_anchor.putpalette(padded_palette)
 
     # Quantize the input image down to the closest matching palette colors using Floyd-Steinberg dithering
+    dither = im.encoderinfo.get("dither", Image.Dither.FLOYDSTEINBERG)
     quantized_im = im.convert("RGB").quantize(palette=palette_anchor, dither=dither)
     pixel_bytes = bytearray(quantized_im.tobytes())
 
@@ -295,7 +319,6 @@ def _save(im: Image.Image, fp, _filename):
     # 5. RETRIEVE METADATA VARIANTS OR APPLY IN-GAME DEFAULTS
     x_center = im.info.get("x_center", 20000)
     z_center = im.info.get("z_center", 20000)
-    data_version = im.info.get("data_version", data_version)  # Default to standard 1.20+
 
     # 6. ASSEMBLE RAW BINARY NBT ARCHITECTURE CHUNKS
     nbt_payload = bytearray()
@@ -354,6 +377,19 @@ def _save(im: Image.Image, fp, _filename):
         nbt_payload.append(0x08)  # TAG_String
         nbt_payload.extend(_encode_nbt_string("dimension"))
         nbt_payload.extend(_encode_nbt_string("minecraft:overworld"))
+    else:
+        nbt_payload.append(0x01)  # TAG_Byte
+        nbt_payload.extend(_encode_nbt_string("dimension"))
+        nbt_payload.append(0)
+
+    default_scale = 0
+    if data_version <= 0:
+        default_scale = 3
+    scale = im.info.get("scale", default_scale)
+    scale = im.encoderinfo.get("scale", scale)
+    nbt_payload.append(0x01)  # TAG_Byte
+    nbt_payload.extend(_encode_nbt_string("scale"))
+    nbt_payload.append(scale)
 
     # colors TAG_Byte_Array payload array injection block
     nbt_payload.append(0x07)
