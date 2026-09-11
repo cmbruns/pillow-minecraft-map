@@ -38,7 +38,7 @@ import gzip
 import logging
 import re
 from typing import cast, BinaryIO
-from PIL import Image, ImageFile, ImagePalette
+from PIL import Image, ImageFile, ImagePalette, UnidentifiedImageError
 
 logger = logging.getLogger("PIL.MinecraftMapPlugin")
 
@@ -186,9 +186,12 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         # 1. Rewind the stream and open it as a GZIP stream
         fp = cast(BinaryIO, self.fp)  # to silence the PyCharm linter
         fp.seek(0)
-        with gzip.open(fp, mode="rb") as gz:
-            _fb = gz.read()
-            self.file_bytes: bytes = _fb
+        try:
+            with gzip.open(fp, mode="rb") as gz:
+                _fb = gz.read()
+                self.file_bytes: bytes = _fb
+        except gzip.BadGzipFile as exc:
+            raise UnidentifiedImageError from exc
         self._pixels = self.get_byte_array("colors")
         assert isinstance(self._pixels, bytes)
         assert 128*128 == len(self._pixels)

@@ -2,9 +2,11 @@ import io
 import os
 import sys
 
-from PIL import Image
-import pillow_minecraft_map  # "unused" import loads the plugin as a side effect
+from PIL import Image, UnidentifiedImageError
+import pillow_minecraft_map  # noqa "unused" import loads the plugin as a side effect
 import pytest
+
+from pillow_minecraft_map.plugin import MinecraftMapImageFile
 
 
 def create_mock_map(scale_value=3):
@@ -19,14 +21,26 @@ def create_mock_map(scale_value=3):
 def test_load_valid_minecraft_map():
     """Test that a valid map file opens with correct dimensions and metadata."""
     mock_file = create_mock_map(scale_value=2)
-    folder = os.path.dirname(__file__)
     with Image.open(mock_file) as img:
         assert img.size == (128, 128)
         assert img.info.get("scale") == 2
+        assert img.format == "MINECRAFT_MAP"
+
+
+def test_load_invalid_minecraft_map():
+    with Image.open("images/not_a_map.dat") as img:
+        assert img.format != "MINECRAFT_MAP"
+
+
+def test_load_invalid_minecraft_map2():
+    with pytest.raises(UnidentifiedImageError):
+        with open("images/not_a_map.dat", "rb") as f:
+            mmif = MinecraftMapImageFile(f)
+            mmif._open()
 
 
 if __name__ == "__main__":
     # Passing __file__ instructs pytest to specifically run this file.
     # sys.exit ensures the script exits with the correct status code for CI/CD pipelines.
-    current_file = os.path.abspath(__file__)
+    current_file: str = os.path.abspath(__file__)
     sys.exit(pytest.main([current_file]))
