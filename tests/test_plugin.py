@@ -28,13 +28,15 @@ def test_load_valid_minecraft_map():
 
 
 def test_load_invalid_minecraft_map():
-    with Image.open("images/not_a_map.dat") as img:
+    folder: str = os.path.dirname(os.path.abspath(__file__))
+    with Image.open(f"{folder}/images/not_a_map.dat") as img:
         assert img.format != "MINECRAFT_MAP"
 
 
 def test_load_invalid_minecraft_map2():
+    folder: str = os.path.dirname(os.path.abspath(__file__))
     with pytest.raises(UnidentifiedImageError):
-        with open("images/not_a_map.dat", "rb") as f:
+        with open(f"{folder}/images/not_a_map.dat", "rb") as f:
             mmif = MinecraftMapImageFile(f)
             mmif._open()
 
