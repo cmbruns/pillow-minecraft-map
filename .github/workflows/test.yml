@@ -35,4 +35,4 @@ jobs:
 
     - name: Run tests with pytest
       run: |
-        pytest test_plugin.py
+        pytest

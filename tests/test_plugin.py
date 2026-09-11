@@ -28,4 +28,5 @@ def test_load_valid_minecraft_map():
 if __name__ == "__main__":
     # Passing __file__ instructs pytest to specifically run this file.
     # sys.exit ensures the script exits with the correct status code for CI/CD pipelines.
-    sys.exit(pytest.main([__file__]))
+    current_file = os.path.abspath(__file__)
+    sys.exit(pytest.main([current_file]))
