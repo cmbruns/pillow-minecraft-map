@@ -38,6 +38,8 @@ import gzip
 import logging
 import re
 from typing import cast, BinaryIO
+import zlib
+
 from PIL import Image, ImageFile, ImagePalette, UnidentifiedImageError
 
 logger = logging.getLogger("PIL.MinecraftMapPlugin")
@@ -184,10 +186,10 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         fp = cast(BinaryIO, self.fp)  # to silence the PyCharm linter
         fp.seek(0)
         try:
-            with gzip.open(fp, mode="rb") as gz:
-                _fb = gz.read()
-                self.file_bytes: bytes = _fb
-        except gzip.BadGzipFile as exc:
+            self.file_bytes = safe_decompress(fp)
+        except zlib.error as exc:
+            raise UnidentifiedImageError from exc
+        except ValueError as exc:
             raise UnidentifiedImageError from exc
         self._pixels = self.get_byte_array("colors")
         assert isinstance(self._pixels, bytes)
@@ -475,3 +477,24 @@ def rgb_from_int(val: int = 0xFFFFFF) -> tuple[int, int, int]:
         (val >> 8) & 0xFF,  # G
         val & 0xFF  # B
     )
+
+
+def safe_decompress(stream: BinaryIO, max_size: int = 1024 * 1024):  # 1 MB limit
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    total_output_size = 0
+    chunks = []
+    for chunk in stream:
+        decompressed_chunk = decompressor.decompress(chunk)
+        total_output_size += len(decompressed_chunk)
+        if total_output_size > max_size:
+            raise ValueError("Decompression bomb detected: Size exceeds limit!")
+        chunks.append(decompressed_chunk)
+    # Flush remaining data if any
+    final_chunk = decompressor.flush()
+    if final_chunk:
+        total_output_size += len(final_chunk)
+        if total_output_size > max_size:
+            raise ValueError("Decompression bomb detected: Size exceeds limit!")
+        chunks.append(final_chunk)
+
+    return b"".join(chunks)
