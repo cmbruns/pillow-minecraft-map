@@ -144,7 +144,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         if it matches this plugin's format.
         """
         # Match only the standard GZIP magic numbers
-        return len(prefix) >= 3 and prefix[:3] == b"\x1f\x8b\x08"
+        return prefix[:3] == b"\x1f\x8b\x08"
 
     def _find_tag_payload(self, tag: str) -> int:
         tag_bytes = tag.encode()
