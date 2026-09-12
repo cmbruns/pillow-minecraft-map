@@ -144,7 +144,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         if it matches this plugin's format.
         """
         # Match only the standard GZIP magic numbers
-        return len(prefix) >= 3 and prefix[:3] == b"\x1f\x8b\x08"
+        return prefix[:3] == b"\x1f\x8b\x08"
 
     def _find_tag_payload(self, tag: str) -> int:
         tag_bytes = tag.encode()
@@ -169,12 +169,9 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
 
     def load(self):
         """Override load to push the bytes straight to the internal C core."""
-        if hasattr(self, "_pixels") and self._pixels is not None:
+        if self._pixels is not None:
             self.load_prepare()
-            self.frombytes(self._pixels, "raw", ("P", 0, 1))
-            if self.palette:
-                raw_mode, data_bytes = self.palette.getdata()
-                self.im.putpalette("RGB", raw_mode, data_bytes)
+            self.frombytes(self._pixels)
             self._pixels = None
         return super().load()
 
@@ -206,10 +203,8 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         raw_palette = JE_1_17_PALETTE  # Mostly valid back to before 1.8.3
         # TODO: support minor variations, and very old palettes like beta1.6 etc.
         # Flatten the list of RGB tuples into a 1D sequence of integers
-        flat_palette = [color for rgb in raw_palette for color in rgb_from_int(rgb)]
-        # Pad out to exactly 768 entries (256 colors * 3 channels) using zeros
-        pil_palette = flat_palette + [0] * (768 - len(flat_palette))
-        self.palette = ImagePalette.ImagePalette(mode="RGB", palette=pil_palette)
+        flat_palette = bytes(color for rgb in raw_palette for color in rgb_from_int(rgb))
+        self.palette = ImagePalette.raw(rawmode="RGB", data=flat_palette)
         # Parse metadata
         try:
             x_center = self.get_int("xCenter")
@@ -246,8 +241,7 @@ def _save(im: Image.Image, fp, _filename):
     data_version = im.info.get("data_version", data_version)  # Default to standard 1.20+
 
     # EVALUATE AND RESAMPLE GEOMETRY BOUNDS
-    width, height = im.size
-    aspect_ratio = width / height
+    aspect_ratio = im.width / im.height
 
     if aspect_ratio > 1.8 or aspect_ratio < (1 / 1.8):
         raise ValueError(
@@ -269,7 +263,7 @@ def _save(im: Image.Image, fp, _filename):
         # Split out alpha channel matrix
         if im.mode != "RGBA":
             im = im.convert("RGBA")
-        _, _, _, alpha_channel = im.split()
+        alpha_channel = im.getchannel(3)
         # Pixel index is 0 wherever transparency falls below a strict opacity threshold
         alpha_mask = alpha_channel.point(lambda p: 255 if p < 128 else 0)
 
@@ -463,16 +457,16 @@ def palette_size_for_version(version) -> tuple[int, int]:
 def register_minecraft_map():
     """Hooks the Minecraft decoder module into Pillow's driver registry."""
     if MinecraftMapImageFile.format not in Image.ID:
-        Image.register_extensions(
+        Image.register_extension(
             MinecraftMapImageFile.format,
-            extensions=[".dat"],
+            extension=".dat",
         )
         Image.register_open(
             MinecraftMapImageFile.format,
             MinecraftMapImageFile,
             MinecraftMapImageFile.accept,
         )
-        Image.register_save(MinecraftMapImageFile.format, _save,)
+        Image.register_save(MinecraftMapImageFile.format, _save)
 
 
 def rgb_from_int(val: int = 0xFFFFFF) -> tuple[int, int, int]:
