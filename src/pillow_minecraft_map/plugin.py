@@ -203,10 +203,8 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         raw_palette = JE_1_17_PALETTE  # Mostly valid back to before 1.8.3
         # TODO: support minor variations, and very old palettes like beta1.6 etc.
         # Flatten the list of RGB tuples into a 1D sequence of integers
-        flat_palette = [color for rgb in raw_palette for color in rgb_from_int(rgb)]
-        # Pad out to exactly 768 entries (256 colors * 3 channels) using zeros
-        pil_palette = flat_palette + [0] * (768 - len(flat_palette))
-        self.palette = ImagePalette.raw(rawmode="RGB", data=bytes(pil_palette))
+        flat_palette = bytes(color for rgb in raw_palette for color in rgb_from_int(rgb))
+        self.palette = ImagePalette.raw(rawmode="RGB", data=flat_palette)
         # Parse metadata
         try:
             x_center = self.get_int("xCenter")
