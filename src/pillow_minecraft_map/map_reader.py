@@ -183,11 +183,3 @@ class MapReader:
             raise ValueError(f"Unsupported NBT tag type in map: '{tag_type.name}'")
         else:
             raise ValueError(f"Unknown NBT tag type: '{tag_type.name}'")
-
-
-folder = os.path.abspath(os.path.dirname(__file__)) + "/images"
-for file_name in glob.glob(os.path.join(folder, "*/*.dat")):
-    print(file_name)
-    with open(file_name, "rb") as fp:
-        mr = MapReader(fp)
-        print(mr.map_data)
