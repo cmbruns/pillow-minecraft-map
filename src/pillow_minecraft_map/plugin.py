@@ -171,7 +171,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         """Override load to push the bytes straight to the internal C core."""
         if hasattr(self, "_pixels") and self._pixels is not None:
             self.load_prepare()
-            self.frombytes(self._pixels, "raw", ("P", 0, 1))
+            self.frombytes(self._pixels)
             if self.palette:
                 raw_mode, data_bytes = self.palette.getdata()
                 self.im.putpalette("RGB", raw_mode, data_bytes)
@@ -246,8 +246,7 @@ def _save(im: Image.Image, fp, _filename):
     data_version = im.info.get("data_version", data_version)  # Default to standard 1.20+
 
     # EVALUATE AND RESAMPLE GEOMETRY BOUNDS
-    width, height = im.size
-    aspect_ratio = width / height
+    aspect_ratio = im.width / im.height
 
     if aspect_ratio > 1.8 or aspect_ratio < (1 / 1.8):
         raise ValueError(
@@ -269,7 +268,7 @@ def _save(im: Image.Image, fp, _filename):
         # Split out alpha channel matrix
         if im.mode != "RGBA":
             im = im.convert("RGBA")
-        _, _, _, alpha_channel = im.split()
+        alpha_channel = im.getchannel(3)
         # Pixel index is 0 wherever transparency falls below a strict opacity threshold
         alpha_mask = alpha_channel.point(lambda p: 255 if p < 128 else 0)
 
@@ -463,16 +462,16 @@ def palette_size_for_version(version) -> tuple[int, int]:
 def register_minecraft_map():
     """Hooks the Minecraft decoder module into Pillow's driver registry."""
     if MinecraftMapImageFile.format not in Image.ID:
-        Image.register_extensions(
+        Image.register_extension(
             MinecraftMapImageFile.format,
-            extensions=[".dat"],
+            extension=".dat",
         )
         Image.register_open(
             MinecraftMapImageFile.format,
             MinecraftMapImageFile,
             MinecraftMapImageFile.accept,
         )
-        Image.register_save(MinecraftMapImageFile.format, _save,)
+        Image.register_save(MinecraftMapImageFile.format, _save)
 
 
 def rgb_from_int(val: int = 0xFFFFFF) -> tuple[int, int, int]:
