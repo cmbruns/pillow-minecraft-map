@@ -6,7 +6,7 @@ import enum
 import glob
 import os
 import struct
-from typing import BinaryIO
+from typing import BinaryIO, Any
 
 import zlib
 from PIL import UnidentifiedImageError
@@ -43,6 +43,7 @@ class MapReader:
             raise UnidentifiedImageError("'colors' tag not found")
 
     def inflate_to_byte(self, pos: int) -> None:
+        """Continue decompressing to the nth byte of the decompressed stream"""
         while len(self.decompressed) < pos:
             chunk = fp.read(1024)
             if not chunk:
@@ -52,6 +53,7 @@ class MapReader:
                 raise ValueError(f"Decompression bomb detected: Exceeded maximum allowed size {self.max_length}")
 
     def read_root_tag(self):
+        """Begin reading a freshly opened map file"""
         # Root tag - must be a container with name ""
         tag_type: NBTTagType = NBTTagType(self.read_u8())
         if tag_type != NBTTagType.Compound:
@@ -61,6 +63,7 @@ class MapReader:
             raise UnidentifiedImageError  # Not a Minecraft map
 
     def read_top_tags(self):
+        """Read the NBT tags directly under the root"""
         # There are only two top level tags found in Minecraft maps:
         # "data" and "DataVersion"
         while True:
@@ -87,6 +90,7 @@ class MapReader:
                 "dimension",
                 "frames",
                 "height",
+                "locked",
                 "scale",
                 "trackingPosition",
                 "unlimitedTracking",
@@ -113,6 +117,28 @@ class MapReader:
     def read_i32(self) -> int:
         return struct.unpack(">i", self.read_exact(4))[0]
 
+    def read_list(self) -> list[Any]:
+        # Read element type
+        elem_type = NBTTagType(self.read_u8())
+
+        # Read list length
+        length = self.read_i32()
+        if length < 0:
+            raise ValueError("Negative NBT list length")
+        if length > 1_000_000:
+            raise ValueError("NBT list too large")
+
+        # Empty list is trivial
+        if length == 0:
+            return []
+
+        # Parse elements incrementally
+        out = []
+        for _ in range(length):
+            out.append(self.read_payload(elem_type))
+
+        return out
+
     def read_string(self) -> str:
         length = self.read_u16()
         if length > 1024:  # sanity limit
@@ -127,7 +153,7 @@ class MapReader:
             name = self.read_string()
             yield tag_type, name, self.read_payload(tag_type)
 
-    def read_payload(self, tag_type: NBTTagType) -> int | str | bytearray:
+    def read_payload(self, tag_type: NBTTagType) -> int | str | bytearray | list:
         if tag_type == NBTTagType.Byte:
             return self.read_exact(1)[0]
         elif tag_type == NBTTagType.Short:
@@ -141,17 +167,19 @@ class MapReader:
             if length < 0 or length > 1_000_000:
                 raise ValueError("Byte array length suspicious")
             return self.read_exact(length)
+        elif tag_type == NBTTagType.List:
+            return self.read_list()
         # For now, skip complex types:
         elif tag_type in (
-                NBTTagType.List,
+                # NBTTagType.List,
                 NBTTagType.Compound,
                 NBTTagType.Int_Array,
                 NBTTagType.Long_Array
         ):
             # Implement minimal skipping logic or bail
-            raise ValueError(f"Unsupported NBT tag type in map {tag_type.name}")
+            raise ValueError(f"Unsupported NBT tag type in map: '{tag_type.name}'")
         else:
-            raise ValueError(f"Unknown NBT tag type: {tag_type.name}")
+            raise ValueError(f"Unknown NBT tag type: '{tag_type.name}'")
 
 
 folder = os.path.abspath(os.path.dirname(__file__)) + "/images"
