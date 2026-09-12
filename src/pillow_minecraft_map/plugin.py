@@ -172,9 +172,6 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         if self._pixels is not None:
             self.load_prepare()
             self.frombytes(self._pixels)
-            if self.palette:
-                raw_mode, data_bytes = self.palette.getdata()
-                self.im.putpalette("RGB", raw_mode, data_bytes)
             self._pixels = None
         return super().load()
 
@@ -209,7 +206,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         flat_palette = [color for rgb in raw_palette for color in rgb_from_int(rgb)]
         # Pad out to exactly 768 entries (256 colors * 3 channels) using zeros
         pil_palette = flat_palette + [0] * (768 - len(flat_palette))
-        self.palette = ImagePalette.ImagePalette(mode="RGB", palette=pil_palette)
+        self.palette = ImagePalette.raw(rawmode="RGB", data=bytes(pil_palette))
         # Parse metadata
         try:
             x_center = self.get_int("xCenter")
