@@ -5,16 +5,29 @@ build-backend = "hatchling.build"
 [project]
 name = "pillow-minecraft-map"
 version = "1.1.3"
-description = "A Pillow Image plugin to open Minecraft .dat map files."
+description = "A Pillow (PIL) plugin for loading, saving, and color-quantizing Minecraft .dat map files."
 readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["minecraft", "pillow", "pil", "map-art", "nbt", "map.dat", "image-processing"]
 authors = [
     { name = "Christopher Bruns", email = "cmbruns@rotatingpenguin.com" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Topic :: Multimedia :: Graphics",
+
 ]
 dependencies = [
     "Pillow>=10.0.0"
@@ -27,3 +40,4 @@ test = [
 
 [project.urls]
 Homepage = "https://github.com/cmbruns/pillow-minecraft-map"
+Issues = "https://github.com/cmbruns/pillow-minecraft-map/issues"
