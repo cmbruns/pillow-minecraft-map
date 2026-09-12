@@ -169,7 +169,7 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
 
     def load(self):
         """Override load to push the bytes straight to the internal C core."""
-        if hasattr(self, "_pixels") and self._pixels is not None:
+        if self._pixels is not None:
             self.load_prepare()
             self.frombytes(self._pixels)
             if self.palette:
