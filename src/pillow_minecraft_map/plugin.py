@@ -38,9 +38,10 @@ import gzip
 import logging
 import re
 from typing import cast, BinaryIO
-import zlib
 
-from PIL import Image, ImageFile, ImagePalette, UnidentifiedImageError
+from PIL import Image, ImageFile, ImagePalette
+
+from pillow_minecraft_map.map_reader import MapReader
 
 logger = logging.getLogger("PIL.MinecraftMapPlugin")
 
@@ -148,27 +149,6 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         # Match only the standard GZIP magic numbers
         return prefix[:3] == b"\x1f\x8b\x08"
 
-    def _find_tag_payload(self, tag: str) -> int:
-        tag_bytes = tag.encode()
-        nbt_string_prefix = len(tag_bytes).to_bytes(2, "big") + tag_bytes
-        return self.file_bytes.index(nbt_string_prefix) + len(nbt_string_prefix)
-
-    def get_byte(self, tag: str) -> int:
-        """Fetch an NBT single byte value by tag name."""
-        pos = self._find_tag_payload(tag)
-        return int.from_bytes(self.file_bytes[pos: pos + 1], "big", signed=True)
-
-    def get_byte_array(self, tag: str) -> bytes:
-        """Fetch an NBT byte array by tag name"""
-        pos = self._find_tag_payload(tag)
-        size = int.from_bytes(self.file_bytes[pos: pos + 4], "big")
-        return self.file_bytes[pos + 4: pos + 4 + size]
-
-    def get_int(self, tag: str) -> int:
-        """Fetch an NBT integer value by tag name"""
-        pos = self._find_tag_payload(tag)
-        return int.from_bytes(self.file_bytes[pos: pos + 4], "big", signed=True)
-
     def load(self):
         """Override load to push the bytes straight to the internal C core."""
         if self._pixels is not None:
@@ -185,36 +165,23 @@ class MinecraftMapImageFile(ImageFile.ImageFile):
         # 1. Rewind the stream and open it as a GZIP stream
         fp = cast(BinaryIO, self.fp)  # to silence the PyCharm linter
         fp.seek(0)
-        try:
-            self.file_bytes = safe_decompress(fp)
-        except zlib.error as exc:
-            raise UnidentifiedImageError from exc
-        except ValueError as exc:
-            raise UnidentifiedImageError from exc
-        self._pixels = self.get_byte_array("colors")
-        assert isinstance(self._pixels, bytes)
+        mr = MapReader(fp)
+        self._pixels = mr.map_data["colors"]
+        # assert isinstance(self._pixels, bytes)
         assert 128*128 == len(self._pixels)
         self._size = 128, 128
         # Handle color palette
         self._mode = "P"
-        try:
-            data_version = self.get_int("DataVersion")
-        except ValueError:
-            # Fallback layout if DataVersion string signature is absent in older files
-            data_version = 0
+        data_version = mr.map_data.get("DataVersion", 0)
         raw_palette = JE_1_17_PALETTE  # Mostly valid back to before 1.8.3
         # TODO: support minor variations, and very old palettes like beta1.6 etc.
         # Flatten the list of RGB tuples into a 1D sequence of integers
         flat_palette = bytes(color for rgb in raw_palette for color in rgb_from_int(rgb))
         self.palette = ImagePalette.raw(rawmode="RGB", data=flat_palette)
         # Parse metadata
-        try:
-            x_center = self.get_int("xCenter")
-            z_center = self.get_int("zCenter")
-            scale = self.get_byte("scale")
-        except ValueError:
-            # Safe fallbacks if parsing legacy/custom map structures
-            x_center, z_center, scale = 0, 0, 0
+        x_center = mr.map_data.get("xCenter", 20000)
+        z_center = mr.map_data.get("zCenter", 20000)
+        scale = mr.map_data.get("scale", 0)
         # Inject into Pillow's metadata API
         self.info["x_center"] = x_center
         self.info["z_center"] = z_center
@@ -477,24 +444,3 @@ def rgb_from_int(val: int = 0xFFFFFF) -> tuple[int, int, int]:
         (val >> 8) & 0xFF,  # G
         val & 0xFF  # B
     )
-
-
-def safe_decompress(stream: BinaryIO, max_size: int = 1024 * 1024):  # 1 MB limit
-    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    total_output_size = 0
-    chunks = []
-    for chunk in stream:
-        decompressed_chunk = decompressor.decompress(chunk)
-        total_output_size += len(decompressed_chunk)
-        if total_output_size > max_size:
-            raise ValueError("Decompression bomb detected: Size exceeds limit!")
-        chunks.append(decompressed_chunk)
-    # Flush remaining data if any
-    final_chunk = decompressor.flush()
-    if final_chunk:
-        total_output_size += len(final_chunk)
-        if total_output_size > max_size:
-            raise ValueError("Decompression bomb detected: Size exceeds limit!")
-        chunks.append(final_chunk)
-
-    return b"".join(chunks)

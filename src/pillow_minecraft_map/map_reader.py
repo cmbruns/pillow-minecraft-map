@@ -37,7 +37,10 @@ class MapReader:
         self.decompressed: bytearray = bytearray(b'')
         self.cursor: int = 0
         self.map_data = dict()
-        self.read_root_tag()
+        try:
+            self.read_root_tag()
+        except zlib.error as exc:
+            raise UnidentifiedImageError from exc
         self.read_top_tags()
         if "colors" not in self.map_data:
             raise UnidentifiedImageError("'colors' tag not found")
@@ -45,7 +48,7 @@ class MapReader:
     def inflate_to_byte(self, pos: int) -> None:
         """Continue decompressing to the nth byte of the decompressed stream"""
         while len(self.decompressed) < pos:
-            chunk = fp.read(1024)
+            chunk = self.compressed_stream.read(1024)
             if not chunk:
                 raise ValueError("Unexpected end of file")
             self.decompressed += self.inflater.decompress(chunk, max_length=self.max_length)
