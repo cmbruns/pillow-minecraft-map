@@ -97,6 +97,8 @@ class MapReader:
                 "scale",
                 "trackingPosition",
                 "unlimitedTracking",
+                "UUIDLeast",
+                "UUIDMost",
                 "width",
                 "xCenter",
                 "zCenter",
@@ -163,6 +165,8 @@ class MapReader:
             return struct.unpack(">h", self.read_exact(2))[0]
         elif tag_type == NBTTagType.Int:
             return self.read_i32()
+        elif tag_type == NBTTagType.Long:
+            return struct.unpack(">q", self.read_exact(8))[0]
         elif tag_type == NBTTagType.String:
             return self.read_string()
         elif tag_type == NBTTagType.Byte_Array:
