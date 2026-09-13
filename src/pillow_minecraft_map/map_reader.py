@@ -3,13 +3,14 @@ Incremental Map Loader to maybe avoid decompression bombs
 """
 
 import enum
-import glob
-import os
+import logging
 import struct
-from typing import BinaryIO, Any
+from typing import BinaryIO, Iterator
 
 import zlib
 from PIL import UnidentifiedImageError
+
+logger = logging.getLogger("PIL.MinecraftMapPlugin")
 
 
 class NBTTagType(enum.IntEnum):
@@ -28,10 +29,19 @@ class NBTTagType(enum.IntEnum):
     Long_Array = 0xC
 
 
+PayloadType = int | float | str | bytearray | list | dict
+
+
 class MapReader:
-    def __init__(self, compressed_stream: BinaryIO, max_length=1024 * 1024) -> None:
+    def __init__(
+            self,
+            compressed_stream: BinaryIO,
+            max_length: int = 1024 * 1024,  # Data size limit
+            max_depth: int = 30,  # Data tree recursion depth limit
+    ) -> None:
         self.compressed_stream: BinaryIO = compressed_stream
         self.max_length: int = max_length
+        self.max_depth: int = max_depth
         # 16 + MAX_WBITS tells zlib to expect a gzip wrapper
         self.inflater = zlib.decompressobj(16 + zlib.MAX_WBITS)
         self.decompressed: bytearray = bytearray(b'')
@@ -43,7 +53,7 @@ class MapReader:
             raise UnidentifiedImageError from exc
         self.read_top_tags()
         if "colors" not in self.map_data:
-            raise UnidentifiedImageError("'colors' tag not found")
+            raise UnidentifiedImageError("'colors' Minecraft map NBT tag not found")
 
     def inflate_to_byte(self, pos: int) -> None:
         """Continue decompressing to the nth byte of the decompressed stream"""
@@ -55,7 +65,7 @@ class MapReader:
             if len(self.decompressed) > self.max_length:
                 raise ValueError(f"Decompression bomb detected: Exceeded maximum allowed size {self.max_length}")
 
-    def read_root_tag(self):
+    def read_root_tag(self) -> None:
         """Begin reading a freshly opened map file"""
         # Root tag - must be a container with name ""
         tag_type: NBTTagType = NBTTagType(self.read_u8())
@@ -65,7 +75,7 @@ class MapReader:
         if tag_name != "":
             raise UnidentifiedImageError  # Not a Minecraft map
 
-    def read_top_tags(self):
+    def read_top_tags(self) -> None:
         """Read the NBT tags directly under the root"""
         # There are only two top level tags found in Minecraft maps:
         # "data" and "DataVersion"
@@ -77,16 +87,19 @@ class MapReader:
             if (tag_type, tag_name) == (NBTTagType.Int, "DataVersion"):
                 self.map_data[tag_name] = self.read_i32()
             elif (tag_type, tag_name) == (NBTTagType.Compound, "data"):
-                self.read_data_container()
+                self.read_data_container(depth=1)
             else:
                 raise UnidentifiedImageError
 
-    def read_data_container(self):
+    def read_compound(self, depth) -> dict:
+        out = {}
+        for tag_type, name, payload in self.iter_compound(depth):
+            out[name] = payload
+        return out
+
+    def read_data_container(self, depth: int) -> None:
         # Most map tags are in the "data" section
-        for tag_type, tag_name, payload in self.iter_compound():
-            # TODO: is this too conservative?
-            # we want to be liberal in our inputs, but quickly reject other
-            # non-map NBT files like level.dat
+        for tag_type, tag_name, payload in self.iter_compound(depth):
             if tag_name not in [
                 "banners",
                 "colors",
@@ -103,7 +116,8 @@ class MapReader:
                 "xCenter",
                 "zCenter",
             ]:
-                raise UnidentifiedImageError(f"Unrecognized NBT tag {tag_name}")
+                # Not an error. "Be liberal with your inputs (and conservative with your outputs)"
+                logger.warning(f"Unrecognized Minecraft map NBT tag 'data.{tag_name}'")
             self.map_data[tag_name] = payload
 
     def read_exact(self, n: int = 1) -> bytearray:
@@ -122,26 +136,16 @@ class MapReader:
     def read_i32(self) -> int:
         return struct.unpack(">i", self.read_exact(4))[0]
 
-    def read_list(self) -> list[Any]:
-        # Read element type
-        elem_type = NBTTagType(self.read_u8())
-
-        # Read list length
-        length = self.read_i32()
+    def read_fixed_list(self, elem_type: NBTTagType, length: int, depth: int) -> list[PayloadType]:
         if length < 0:
             raise ValueError("Negative NBT list length")
         if length > 1_000_000:
             raise ValueError("NBT list too large")
-
-        # Empty list is trivial
-        if length == 0:
-            return []
-
-        # Parse elements incrementally
+        if depth > self.max_depth:
+            raise ValueError(f"NBT nesting depth too deep ({depth})")
         out = []
         for _ in range(length):
-            out.append(self.read_payload(elem_type))
-
+            out.append(self.read_payload(elem_type, depth))
         return out
 
     def read_string(self) -> str:
@@ -150,16 +154,24 @@ class MapReader:
             raise ValueError("NBT string too long")
         return self.read_exact(length).decode("utf-8", "replace")
 
-    def iter_compound(self):
+    def iter_compound(self, depth: int) -> Iterator[tuple[NBTTagType, str, PayloadType]]:
+        if depth > self.max_depth:
+            raise ValueError(f"NBT nesting depth too deep ({depth})")
         while True:
             tag_type: NBTTagType = NBTTagType(self.read_u8())
             if tag_type == NBTTagType.End:
                 return
             name = self.read_string()
-            yield tag_type, name, self.read_payload(tag_type)
+            yield tag_type, name, self.read_payload(tag_type, depth)
 
-    def read_payload(self, tag_type: NBTTagType) -> int | str | bytearray | list:
-        if tag_type == NBTTagType.Byte:
+    def read_payload(
+            self,
+            tag_type: NBTTagType,
+            depth: int,
+    ) -> PayloadType:
+        if tag_type == NBTTagType.End:
+            raise ValueError("Unexpected NBT end tag")
+        elif tag_type == NBTTagType.Byte:
             return self.read_exact(1)[0]
         elif tag_type == NBTTagType.Short:
             return struct.unpack(">h", self.read_exact(2))[0]
@@ -167,23 +179,28 @@ class MapReader:
             return self.read_i32()
         elif tag_type == NBTTagType.Long:
             return struct.unpack(">q", self.read_exact(8))[0]
-        elif tag_type == NBTTagType.String:
-            return self.read_string()
+        elif tag_type == NBTTagType.Float:
+            return struct.unpack(">f", self.read_exact(4))[0]
+        elif tag_type == NBTTagType.Double:
+            return struct.unpack(">d", self.read_exact(8))[0]
         elif tag_type == NBTTagType.Byte_Array:
             length = self.read_i32()
             if length < 0 or length > 1_000_000:
                 raise ValueError("Byte array length suspicious")
             return self.read_exact(length)
+        elif tag_type == NBTTagType.String:
+            return self.read_string()
         elif tag_type == NBTTagType.List:
-            return self.read_list()
-        # For now, skip complex types:
-        elif tag_type in (
-                # NBTTagType.List,
-                NBTTagType.Compound,
-                NBTTagType.Int_Array,
-                NBTTagType.Long_Array
-        ):
-            # Implement minimal skipping logic or bail
-            raise ValueError(f"Unsupported NBT tag type in map: '{tag_type.name}'")
+            elem_type = NBTTagType(self.read_u8())
+            length = self.read_i32()
+            return self.read_fixed_list(elem_type, length, depth + 1)
+        elif tag_type == NBTTagType.Compound:
+            return self.read_compound(depth + 1)
+        elif tag_type == NBTTagType.Int_Array:
+            length = self.read_i32()
+            return self.read_fixed_list(NBTTagType.Int, length, depth + 1)
+        elif tag_type == NBTTagType.Long_Array:
+            length = self.read_i32()
+            return self.read_fixed_list(NBTTagType.Long, length, depth + 1)
         else:
             raise ValueError(f"Unknown NBT tag type: '{tag_type.name}'")
